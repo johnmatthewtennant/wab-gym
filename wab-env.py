@@ -129,6 +129,7 @@ class WolvesAndBushesEnv(gym.Env):
 
         ostrich_bush_pairs = self.distances[
             (self.distances.taxicab_distance == 0)
+            & (self.distances.ostrich_role == 1)  # gatherer
             & (self.distances.object_type == "bush")
             & (self.distances.ostrich_alive_killed_starved == 0)
         ]
@@ -147,7 +148,7 @@ class WolvesAndBushesEnv(gym.Env):
         ]
         if not ostrich_wolf_pairs.empty:
             self.ostriches.loc[ostrich_bush_pairs.ostrich_id, "alive_killed_starved"] = 1
-            print("killed")
+            # print("killed")
 
         if self.ostriches.iloc[0].alive_killed_starved == 0:
             reward = 0.05
@@ -173,7 +174,7 @@ class WolvesAndBushesEnv(gym.Env):
             np.array(visible_bushes.delta_y + self.game_options["height"] // 2, int),
         ] = 1
         visible_wolves = visible_objects[
-            (visible_objects.object_type == "wolf") & (visible_objects.ostrich_role == 0)
+            (visible_objects.object_type == "wolf") & (visible_objects.ostrich_role == 0)  # lookout
         ]
         wolf_grid[
             np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
