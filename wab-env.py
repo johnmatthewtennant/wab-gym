@@ -324,8 +324,8 @@ class WolvesAndBushesEnv(gym.Env):
         if role == 0:
             empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
             image[empty] = 255
+        image = image.repeat(scale, axis=0).repeat(scale, axis=1)
         if draw_health:
-            image = image.repeat(scale, axis=0).repeat(scale, axis=1)
             image_from_array = Image.fromarray(image)
             imd = ImageDraw.Draw(image_from_array)
             imd.text((0, 0), str(food[0]), fill="blue")
