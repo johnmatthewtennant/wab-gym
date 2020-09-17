@@ -311,7 +311,7 @@ class WolvesAndBushesEnv(gym.Env):
             * self.game_options["max_berries_per_bush"]
         )
 
-    def render(self, mode="rgb_array", scale=32):
+    def render(self, mode="rgb_array", scale=32, draw_health=True):
         # This is for rendering video. Bushes are green, wolves red, ostriches blue
         wolves, bushes, ostriches, food, role, _ = self._get_obs()
         image = np.zeros(
