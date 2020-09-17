@@ -6,6 +6,7 @@ from gym.utils import seeding
 import numpy as np
 import pandas as pd
 import itertools
+from PIL import Image, ImageDraw
 
 default_game_options = {
     "num_ostriches": 1,
@@ -22,7 +23,9 @@ default_game_options = {
     "wolf_chance_to_despawn": 0.05,
     "start_with_wolves": True,
     "starting_food": None,  # None values will be assigned randomly
+    # "starting_food": 40,
     "starting_role": None,  # None values will be assigned randomly
+    "wolves_can_move": False,
 }
 
 action_definitions = pd.DataFrame(
@@ -84,6 +87,9 @@ class WolvesAndBushesEnv(gym.Env):
                 spaces.Box(
                     0, 1, shape=(self.game_options["width"], self.game_options["height"]), dtype=int
                 ),  # bushes
+                spaces.Box(
+                    0, 1, shape=(self.game_options["width"], self.game_options["height"]), dtype=int
+                ),  # ostriches
                 spaces.Box(0, 1, shape=(1, 1)),  # current food
                 spaces.Discrete(2),  # current role
                 spaces.Discrete(3),  # alive, killed, starved
@@ -126,7 +132,38 @@ class WolvesAndBushesEnv(gym.Env):
         self.generate_bushes()
 
         self.update_master_df_and_distances()
+        if self.game_options["wolves_can_move"]:
+            # wolf move
+            ostrich_wolf_pairs = self.distances.loc[
+                (
+                    self.distances[(self.distances.object_type == "wolf")]
+                    .groupby(["object_id"])
+                    .agg({"taxicab_distance": "idxmin"})
+                ).taxicab_distance
+            ]
+            if not ostrich_wolf_pairs.empty:
+                # TODO randomize when equal
+                move_x = (
+                    abs(ostrich_wolf_pairs.delta_x) >= abs(ostrich_wolf_pairs.delta_y)
+                ) * np.sign(ostrich_wolf_pairs.delta_x)
+                move_y = (
+                    abs(ostrich_wolf_pairs.delta_x) < abs(ostrich_wolf_pairs.delta_y)
+                ) * np.sign(ostrich_wolf_pairs.delta_y)
+                # TODO this doesn't work because I'm not using object id as index properly. Currently hacking it and just ignore the index for this sum. Should probably make the dfs use uuid indices
+                self.wolves.loc[ostrich_wolf_pairs.object_id, "x"] += list(move_x)
+                self.wolves.loc[ostrich_wolf_pairs.object_id, "y"] += list(move_y)
 
+            # TODO is it necessary to do this again?
+            self.update_master_df_and_distances()
+
+        # wolf kill
+        ostrich_wolf_kills = self.distances[
+            (self.distances.taxicab_distance == 0) & (self.distances.object_type == "wolf")
+        ]
+        if not ostrich_wolf_kills.empty:
+            self.ostriches.loc[ostrich_wolf_kills.ostrich_id, "alive_killed_starved"] = 1
+
+        # ostrich eat
         ostrich_bush_pairs = self.distances[
             (self.distances.taxicab_distance == 0)
             & (self.distances.ostrich_role == 1)  # gatherer
@@ -141,14 +178,12 @@ class WolvesAndBushesEnv(gym.Env):
             self.bushes.loc[ostrich_bush_pairs.object_id, "food"] -= self.game_options[
                 "food_gathered_per_turn"
             ]
+
+        # ostrich get hungry
         self.ostriches.food -= self.game_options["food_consumed_per_turn"]
+
+        # ostrich starve
         self.ostriches.loc[self.ostriches.food < 0, "alive_killed_starved"] = 2
-        ostrich_wolf_pairs = self.distances[
-            (self.distances.taxicab_distance == 0) & (self.distances.object_type == "wolf")
-        ]
-        if not ostrich_wolf_pairs.empty:
-            self.ostriches.loc[ostrich_bush_pairs.ostrich_id, "alive_killed_starved"] = 1
-            # print("killed")
 
         if self.ostriches.iloc[0].alive_killed_starved == 0:
             reward = 0.05
@@ -162,6 +197,8 @@ class WolvesAndBushesEnv(gym.Env):
     def _get_obs(self):
         wolf_grid = np.zeros(self.observation_space[0].shape)
         bush_grid = np.zeros(self.observation_space[1].shape)
+        ostrich_grid = np.zeros(self.observation_space[2].shape)
+
         # TODO fix ostrich_id, especially for multi agent
         visible_objects = self.distances[
             (self.distances.ostrich_id == 0)
@@ -180,12 +217,17 @@ class WolvesAndBushesEnv(gym.Env):
             np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_wolves.delta_y + self.game_options["height"] // 2, int),
         ] = 1
+        visible_ostriches = visible_objects[(visible_objects.object_type == "ostrich")]
+        ostrich_grid[
+            np.array(visible_ostriches.delta_x + self.game_options["width"] // 2, int),
+            np.array(visible_ostriches.delta_y + self.game_options["height"] // 2, int),
+        ] = 1
         # print(bush_grid)
         # print(wolf_grid)
         food = [self.ostriches.iloc[0].food]
         role = self.ostriches.iloc[0].role
         alive_killed_starved = self.ostriches.iloc[0].alive_killed_starved
-        return (wolf_grid, bush_grid, food, role, alive_killed_starved)
+        return (wolf_grid, bush_grid, ostrich_grid, food, role, alive_killed_starved)
 
     def spawn_wolf_maybe(self, x, y, chance_to_spawn_wolf=0.01):
         if np.random.random() <= chance_to_spawn_wolf:
@@ -218,7 +260,7 @@ class WolvesAndBushesEnv(gym.Env):
             starting_food = np.random.randint(1, self.game_options["max_food"] + 1)
         if starting_role is None:
             starting_role = np.random.randint(2)
-        # TODO multiple players
+        # TODO multiple playersp
         self.ostriches = self.ostriches.append(
             {
                 "type": "ostrich",
@@ -269,16 +311,24 @@ class WolvesAndBushesEnv(gym.Env):
             * self.game_options["max_berries_per_bush"]
         )
 
-    def render(self, mode="rgb_array"):
+    def render(self, mode="rgb_array", scale=32):
         # This is for rendering video. Bushes are green, wolves red, ostriches blue
-        wolves, bushes, _, _, _ = self._get_obs()
+        wolves, bushes, ostriches, food, role, _ = self._get_obs()
         image = np.zeros(
             (self.game_options["width"], self.game_options["height"], 3), dtype="uint8"
         )
+
         image[:, :, 0] = 255 * wolves
         image[:, :, 1] = 255 * bushes
-        # image[:,:,2] = 255*ostriches
-        return image
+        image[:, :, 2] = 255 * ostriches
+        if role == 0:
+            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
+            image[empty] = 255
+        image = image.repeat(scale, axis=0).repeat(scale, axis=1)
+        image_from_array = Image.fromarray(image)
+        imd = ImageDraw.Draw(image_from_array)
+        imd.text((0, 0), str(food[0]), fill="blue")
+        return np.array(image_from_array)
 
 
 class RandomAgent(object):
