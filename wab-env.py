@@ -10,22 +10,24 @@ from PIL import Image, ImageDraw
 
 default_game_options = {
     "num_ostriches": 1,
-    "height": 11,
-    "width": 11,
-    "chance_wolf_on_square": 0.01,
+    "height": 15,
+    "width": 15,
+    "chance_wolf_on_square": 0.001,
     "bush_power": 50,
     "max_food": 40,
     "food_gathered_per_turn": 5,
     "food_consumed_per_turn": 1,
     "max_berries_per_bush": 200,
-    "wolf_spawn_distance": 12,
+    "wolf_spawn_margin": 1,
     "max_turns": 200,
     "wolf_chance_to_despawn": 0.05,
     "start_with_wolves": True,
-    "starting_food": None,  # None values will be assigned randomly
-    # "starting_food": 40,
+    # "starting_food": None,  # None values will be assigned randomly
+    # "starting_food": 4000,
     "starting_role": None,  # None values will be assigned randomly
-    "wolves_can_move": False,
+    "wolves_can_move": True,
+    # "debug": True,
+    # "god_mode": True,
 }
 
 action_definitions = pd.DataFrame(
@@ -70,7 +72,7 @@ def assemble_master_df(ostriches, bushes, wolves):
 
 
 class WolvesAndBushesEnv(gym.Env):
-    metadata = {"render.modes": ["rgb_array"]}
+    metadata = {"render.modes": ["human", "rgb_array"], "video.frames_per_second": 12}
 
     def __init__(self, game_options=default_game_options, render=False):
 
@@ -116,12 +118,6 @@ class WolvesAndBushesEnv(gym.Env):
         self.update_master_df_and_distances()
         return self._get_obs()
 
-    def update_master_df_and_distances(self):
-        self.master_df = assemble_master_df(
-            self.ostriches, self.wolves, self.bushes[self.bushes.food > 0]
-        )
-        self.distances = get_distances_to_everything(self.ostriches, self.master_df)
-
     def step(self, actions):
         self.current_turn += 1
         action_details = action_definitions.iloc[actions]
@@ -130,6 +126,11 @@ class WolvesAndBushesEnv(gym.Env):
         )
         self.ostriches.role = self.ostriches.role % 2
         self.generate_bushes()
+
+        # wolves probabilistically despawn, remove wolves that fail check
+        self.wolves = self.wolves[
+            np.random.random(self.wolves.shape[0]) > self.game_options["wolf_chance_to_despawn"]
+        ]
 
         self.update_master_df_and_distances()
         if self.game_options["wolves_can_move"]:
@@ -157,11 +158,12 @@ class WolvesAndBushesEnv(gym.Env):
             self.update_master_df_and_distances()
 
         # wolf kill
-        ostrich_wolf_kills = self.distances[
-            (self.distances.taxicab_distance == 0) & (self.distances.object_type == "wolf")
-        ]
-        if not ostrich_wolf_kills.empty:
-            self.ostriches.loc[ostrich_wolf_kills.ostrich_id, "alive_killed_starved"] = 1
+        if not self.game_options.get("god_mode"):
+            ostrich_wolf_kills = self.distances[
+                (self.distances.taxicab_distance == 0) & (self.distances.object_type == "wolf")
+            ]
+            if not ostrich_wolf_kills.empty:
+                self.ostriches.loc[ostrich_wolf_kills.ostrich_id, "alive_killed_starved"] = 1
 
         # ostrich eat
         ostrich_bush_pairs = self.distances[
@@ -184,6 +186,9 @@ class WolvesAndBushesEnv(gym.Env):
 
         # ostrich starve
         self.ostriches.loc[self.ostriches.food < 0, "alive_killed_starved"] = 2
+
+        # wolf spawn
+        self.spawn_wolves()
 
         if self.ostriches.iloc[0].alive_killed_starved == 0:
             reward = 0.05
@@ -210,9 +215,13 @@ class WolvesAndBushesEnv(gym.Env):
             np.array(visible_bushes.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_bushes.delta_y + self.game_options["height"] // 2, int),
         ] = 1
-        visible_wolves = visible_objects[
-            (visible_objects.object_type == "wolf") & (visible_objects.ostrich_role == 0)  # lookout
-        ]
+        if self.game_options.get("debug"):
+            visible_wolves = visible_objects[(visible_objects.object_type == "wolf")]
+        else:
+            visible_wolves = visible_objects[
+                (visible_objects.object_type == "wolf")
+                & (visible_objects.ostrich_role == 0)  # lookout
+            ]
         wolf_grid[
             np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_wolves.delta_y + self.game_options["height"] // 2, int),
@@ -229,30 +238,113 @@ class WolvesAndBushesEnv(gym.Env):
         alive_killed_starved = self.ostriches.iloc[0].alive_killed_starved
         return (wolf_grid, bush_grid, ostrich_grid, food, role, alive_killed_starved)
 
-    def spawn_wolf_maybe(self, x, y, chance_to_spawn_wolf=0.01):
-        if np.random.random() <= chance_to_spawn_wolf:
-            self.wolves = self.wolves.append({"x": x, "y": y, "type": "wolf"}, ignore_index=True)
+    def render(self, mode="rgb_array", scale=32, draw_health=True):
+        # This is for rendering video. Bushes are green, wolves red, ostriches blue
+        wolves, bushes, ostriches, food, role, alive_killed_starved = self._get_obs()
+        image = np.zeros(
+            (self.game_options["width"], self.game_options["height"], 3), dtype="uint8"
+        )
+
+        image[:, :, 0] = 255 * wolves
+        image[:, :, 1] = 255 * bushes
+        image[:, :, 2] = 255 * ostriches
+        if alive_killed_starved == 1:
+            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
+            image[empty] = 127
+        if role == 0:
+            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
+            image[empty] = 255
+        image = image.repeat(scale, axis=0).repeat(scale, axis=1)
+        if draw_health:
+            image_from_array = Image.fromarray(image)
+            imd = ImageDraw.Draw(image_from_array)
+            imd.text((0, 0), str(food[0]), fill="blue")
+            return np.array(image_from_array)
+        else:
+            return image
+
+    def update_master_df_and_distances(self):
+        self.master_df = assemble_master_df(
+            self.ostriches, self.wolves, self.bushes[self.bushes.food > 0]
+        )
+        self.distances = get_distances_to_everything(self.ostriches, self.master_df)
+
+    def visible_coords(self):
+        visible_coords = set()
+        for _, ostrich in self.ostriches.iterrows():
+            visible_coords = visible_coords | set(
+                itertools.product(
+                    range(
+                        int(ostrich.x - (self.game_options["width"] // 2)),
+                        int(ostrich.x + (self.game_options["width"] // 2)) + 1,
+                    ),
+                    range(
+                        int(ostrich.y - self.game_options["height"] // 2),
+                        int(ostrich.y + self.game_options["height"] // 2) + 1,
+                    ),
+                )
+            )
+        return visible_coords
+
+    def spawn_wolves(self):
+        if self.ostriches.empty:
+            return
+
+        # get candidate wolf spawn positions
+        candidate_spawn_coords = set()
+        for _, ostrich in self.ostriches.iterrows():
+            candidate_spawn_coords = candidate_spawn_coords | set(
+                itertools.product(
+                    range(
+                        ostrich.x
+                        - self.game_options["width"] // 2
+                        - self.game_options["wolf_spawn_margin"],
+                        ostrich.x
+                        + self.game_options["width"] // 2
+                        + self.game_options["wolf_spawn_margin"]
+                        + 1,
+                    ),
+                    range(
+                        ostrich.y
+                        - self.game_options["height"] // 2
+                        - self.game_options["wolf_spawn_margin"],
+                        ostrich.y
+                        + self.game_options["height"] // 2
+                        + self.game_options["wolf_spawn_margin"]
+                        + 1,
+                    ),
+                )
+            )
+
+        # get visible coordinates without bush values
+        new_coords = candidate_spawn_coords - self.visible_coords()
+        new_wolves = pd.DataFrame(new_coords, columns=["x", "y"])
+        new_wolves["type"] = "wolf"
+        # TODO decide if it should be chance_wolf_on_square/2
+        self.wolves = self.wolves.append(
+            new_wolves[
+                np.random.random(new_wolves.shape[0])
+                < self.game_options["chance_wolf_on_square"] / 2
+            ],
+            ignore_index=True,
+        )
 
     def initialize_wolves(self):
         if self.ostriches.empty:
             return
 
         # get all coordinates where a wolf could be
-        coords = set(
-            itertools.product(
-                range(
-                    int(self.ostriches["x"].min() - self.game_options["wolf_spawn_distance"]),
-                    int(self.ostriches["x"].max() + 1 + self.game_options["wolf_spawn_distance"]),
-                ),
-                range(
-                    int(self.ostriches["y"].min() - self.game_options["wolf_spawn_distance"]),
-                    int(self.ostriches["y"].max() + 1 + self.game_options["wolf_spawn_distance"]),
-                ),
-            )
+        new_coords = self.visible_coords()
+        new_wolves = pd.DataFrame(new_coords, columns=["x", "y"])
+        new_wolves["type"] = "wolf"
+        # TODO decide if it should be chance_wolf_on_square/2
+        self.wolves = self.wolves.append(
+            new_wolves[
+                np.random.random(new_wolves.shape[0])
+                < self.game_options["chance_wolf_on_square"] / 2
+            ],
+            ignore_index=True,
         )
-
-        for index, (x, y) in enumerate(coords):
-            self.spawn_wolf_maybe(x, y, self.game_options["chance_wolf_on_square"])
 
     def spawn_ostriches(self, starting_food=None, starting_role=None):
         if starting_food is None:
@@ -277,20 +369,6 @@ class WolvesAndBushesEnv(gym.Env):
         if self.ostriches.empty:
             return
 
-        # get all coordinates that an ostrich can currently see
-        ostrich_coords = set(
-            itertools.product(
-                range(
-                    int(self.ostriches["x"].min() - self.game_options["width"]),
-                    int(self.ostriches["x"].max() + 1 + self.game_options["width"]),
-                ),
-                range(
-                    int(self.ostriches["y"].min() - self.game_options["height"]),
-                    int(self.ostriches["y"].max() + 1 + self.game_options["height"]),
-                ),
-            )
-        )
-
         # get coordinates of all current bushes
         if not self.bushes.empty:
             bush_coords = set(zip(self.bushes.x, self.bushes.y))
@@ -298,7 +376,7 @@ class WolvesAndBushesEnv(gym.Env):
             bush_coords = set()
 
         # get visible coordinates without bush values
-        new_coords = ostrich_coords - bush_coords
+        new_coords = self.visible_coords() - bush_coords
         new_bushes = pd.DataFrame(new_coords, columns=["x", "y"])
         new_bushes["type"] = "bush"
         new_bushes["food"] = self.generate_n_bush_values(len(new_bushes))
@@ -310,28 +388,6 @@ class WolvesAndBushesEnv(gym.Env):
             np.random.random(n) ** self.game_options["bush_power"]
             * self.game_options["max_berries_per_bush"]
         )
-
-    def render(self, mode="rgb_array", scale=32, draw_health=True):
-        # This is for rendering video. Bushes are green, wolves red, ostriches blue
-        wolves, bushes, ostriches, food, role, _ = self._get_obs()
-        image = np.zeros(
-            (self.game_options["width"], self.game_options["height"], 3), dtype="uint8"
-        )
-
-        image[:, :, 0] = 255 * wolves
-        image[:, :, 1] = 255 * bushes
-        image[:, :, 2] = 255 * ostriches
-        if role == 0:
-            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
-            image[empty] = 255
-        image = image.repeat(scale, axis=0).repeat(scale, axis=1)
-        if draw_health:
-            image_from_array = Image.fromarray(image)
-            imd = ImageDraw.Draw(image_from_array)
-            imd.text((0, 0), str(food[0]), fill="blue")
-            return np.array(image_from_array)
-        else:
-            return image
 
 
 class RandomAgent(object):
