@@ -9,26 +9,53 @@ import itertools
 from PIL import Image, ImageDraw
 
 default_game_options = {
+    # GYM OPTIONS
+    "reward_per_turn": 0.05,
+    "reward_for_death": -1,
+    "reward_for_finishing": 1,
+    # GAME
+    "max_turns": 80,
     "num_ostriches": 1,
-    "height": 15,
-    "width": 15,
-    "chance_wolf_on_square": 0.001,
+    "height": 11,
+    "width": 11,
     "bush_power": 100,
-    "max_food": 40,
-    "food_gathered_per_turn": 5,
-    "food_consumed_per_turn": 1,
     "max_berries_per_bush": 200,
-    "wolf_spawn_margin": 1,
-    "max_turns": 200,
-    "wolf_chance_to_despawn": 0.05,
-    "start_with_wolves": True,
-    "starting_food": None,  # None values will be assigned randomly
-    # "starting_food": 4000,
+    # FOOD
+    "max_food": 4,  # Food observations are discrete. This sets the resolution the agent's hunger perception
+    "food_gathered_per_turn": (
+        4 / 8
+    ),  # Best practice: divide max_food by the number of turns it takes to fill your food by gathering
+    "food_consumed_per_turn": (
+        4 / 40
+    ),  # Best practice: divide max_food by the number of turns it takes to die of starvation
+    "starting_food": 4,  # None values will be assigned randomly
     "starting_role": None,  # None values will be assigned randomly
-    "wolves_can_move": True,
-    # "debug": True,
-    # "god_mode": True,
+    # WOLVES
+    "chance_wolf_on_square": 0,  # 0.001,
+    "wolf_spawn_margin": 1,
+    "wolf_chance_to_despawn": 0.05,
+    "start_with_wolves": False,  # True,
+    "wolves_can_move": False,  # True,
+    # TODO add reward for eating?
 }
+
+# default_game_options = {
+#     "num_ostriches": 1,
+#     "height": 11,
+#     "width": 11,
+#     "chance_wolf_on_square": 0.01,
+#     "bush_power": 80,
+#     "max_food": 100,
+#     "food_gathered_per_turn": 5,
+#     "food_consumed_per_turn": 1,
+#     "max_berries_per_bush": 200,
+#     "wolf_spawn_distance": 12,
+#     "max_turns": 200,
+#     "wolf_chance_to_despawn": 0.05,
+#     "start_with_wolves": True,
+#     "starting_food": 40,  # None values will be assigned randomly
+#     "starting_role": None,  # None values will be assigned randomly
+# }
 
 action_definitions = pd.DataFrame(
     [
@@ -71,12 +98,27 @@ def assemble_master_df(ostriches, bushes, wolves):
     return master_df
 
 
+class DummySpec:
+    # TODO don't use this dummy spec
+    def __init__(
+        self, id, reward_threshold=None, nondeterministic=False, max_episode_steps=None, kwargs=None
+    ):
+        self.id = id
+        self.reward_threshold = reward_threshold
+        self.nondeterministic = nondeterministic
+        self.max_episode_steps = max_episode_steps
+
+
 class WolvesAndBushesEnv(gym.Env):
     metadata = {"render.modes": ["rgb_array"], "video.frames_per_second": 12}
 
     def __init__(self, game_options=default_game_options, render=False):
-
         self.game_options = game_options
+        self.spec = DummySpec(
+            id="WolvesAndBushes-v0",
+            max_episode_steps=game_options["max_turns"],
+            reward_threshold=game_options["max_turns"] * game_options["reward_per_turn"] + 1,
+        )
         if self.game_options["width"] % 2 == 0 or self.game_options["height"] % 2 == 0:
             raise ValueError("width and height must be odd numbers")
         # TODO action space will need to be tuple for multiple agents
@@ -92,7 +134,7 @@ class WolvesAndBushesEnv(gym.Env):
                 spaces.Box(
                     0, 1, shape=(self.game_options["width"], self.game_options["height"]), dtype=int
                 ),  # ostriches
-                spaces.Box(0, 1, shape=(1, 1)),  # current food
+                spaces.Discrete(self.game_options["max_food"] + 1),  # current food
                 spaces.Discrete(2),  # current role
                 spaces.Discrete(3),  # alive, killed, starved
             )
@@ -185,18 +227,21 @@ class WolvesAndBushesEnv(gym.Env):
         self.ostriches.food -= self.game_options["food_consumed_per_turn"]
 
         # ostrich starve
-        self.ostriches.loc[self.ostriches.food < 0, "alive_killed_starved"] = 2
+        self.ostriches.loc[self.ostriches.food <= 0, ["alive_killed_starved", "food"]] = [2, 0]
 
         # wolf spawn
         self.spawn_wolves()
 
         if self.ostriches.iloc[0].alive_killed_starved == 0:
-            reward = 0.05
+            if self.current_turn >= self.game_options["max_turns"]:
+                reward = self.game_options["reward_for_finishing"]
+                done = True
+            else:
+                reward = self.game_options["reward_per_turn"]
+                done = False
         else:
-            reward = -1
-        done = (
-            self.current_turn >= self.game_options["max_turns"] or reward == -1
-        )  # or self.all_dead()
+            reward = self.game_options["reward_for_death"]
+            done = True
         return self._get_obs(), reward, done, {}
 
     def _get_obs(self):
@@ -233,7 +278,10 @@ class WolvesAndBushesEnv(gym.Env):
         ] = 1
         # print(bush_grid)
         # print(wolf_grid)
-        food = [self.ostriches.iloc[0].food]
+        food = int(
+            np.clip(self.ostriches.iloc[0].food, 0, self.game_options["max_food"])
+        )  # TODO food will need to be an array eventually (for multiplayer)
+        # print(food)
         role = self.ostriches.iloc[0].role
         alive_killed_starved = self.ostriches.iloc[0].alive_killed_starved
         return (wolf_grid, bush_grid, ostrich_grid, food, role, alive_killed_starved)
@@ -258,7 +306,7 @@ class WolvesAndBushesEnv(gym.Env):
         if draw_health:
             image_from_array = Image.fromarray(image)
             imd = ImageDraw.Draw(image_from_array)
-            imd.text((0, 0), str(food[0]), fill="blue")
+            imd.text((0, 0), str(food), fill="blue")
             return np.array(image_from_array)
         else:
             return image
