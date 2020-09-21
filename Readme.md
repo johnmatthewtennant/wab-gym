@@ -7,7 +7,7 @@ Start it like
 `env = WolvesAndBushesEnv()`
 then you call `env.step(selected_action)` on it over and over
 it will return an object like `(observation, reward, done, debug_output)`
-observation is a tuple like `(wolf_grid, bush_grid, food, role, alive_killed_starved)`
+observation is a tuple like `(wolf_grid, bush_grid, ostrich_grid, food, role, alive_killed_starved)`
 
 the avalable actions are:
 0: up
