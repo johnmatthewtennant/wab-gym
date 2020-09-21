@@ -13,7 +13,7 @@ default_game_options = {
     "height": 15,
     "width": 15,
     "chance_wolf_on_square": 0.001,
-    "bush_power": 50,
+    "bush_power": 100,
     "max_food": 40,
     "food_gathered_per_turn": 5,
     "food_consumed_per_turn": 1,
@@ -22,7 +22,7 @@ default_game_options = {
     "max_turns": 200,
     "wolf_chance_to_despawn": 0.05,
     "start_with_wolves": True,
-    # "starting_food": None,  # None values will be assigned randomly
+    "starting_food": None,  # None values will be assigned randomly
     # "starting_food": 4000,
     "starting_role": None,  # None values will be assigned randomly
     "wolves_can_move": True,
@@ -72,7 +72,7 @@ def assemble_master_df(ostriches, bushes, wolves):
 
 
 class WolvesAndBushesEnv(gym.Env):
-    metadata = {"render.modes": ["human", "rgb_array"], "video.frames_per_second": 12}
+    metadata = {"render.modes": ["rgb_array"], "video.frames_per_second": 12}
 
     def __init__(self, game_options=default_game_options, render=False):
 
