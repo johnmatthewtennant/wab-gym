@@ -19,27 +19,28 @@ from torch.distributions import Categorical
 
 from wab_env import WolvesAndBushesEnv
 
-parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
-parser.add_argument(
-    "--gamma", type=float, default=0.99, metavar="G", help="discount factor (default: 0.99)"
-)
-parser.add_argument("--seed", type=int, default=543, metavar="N", help="random seed (default: 543)")
-parser.add_argument("--render", action="store_true", help="render the environment")
-parser.add_argument(
-    "--log-interval",
-    type=int,
-    default=10,
-    metavar="N",
-    help="interval between training status logs (default: 10)",
-)
-args = parser.parse_args()
+# parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
+# parser.add_argument(
+#     "--gamma", type=float, default=0.99, metavar="G", help="discount factor (default: 0.99)"
+# )
+# parser.add_argument("--seed", type=int, default=543, metavar="N", help="random seed (default: 543)")
+# parser.add_argument("--render", action="store_true", help="render the environment")
+# parser.add_argument(
+#     "--log-interval",
+#     type=int,
+#     default=10,
+#     metavar="N",
+#     help="interval between training status logs (default: 10)",
+# )
+# args = parser.parse_args()
 
+gamma = 0.99
+log_interval = 10
 
 env = WolvesAndBushesEnv()
-# env = gym.make('FrozenLake-v0')
 
-env.seed(args.seed)
-torch.manual_seed(args.seed)
+# env.seed(args.seed)
+# torch.manual_seed(args.seed)
 
 
 SavedAction = namedtuple("SavedAction", ["log_prob", "value"])
@@ -132,7 +133,8 @@ def finish_episode():
     # calculate the true value using rewards returned from the environment
     for r in model.rewards[::-1]:
         # calculate the discounted value
-        R = r + args.gamma * R
+        # R = r + args.gamma * R
+        R = r + gamma * R
         returns.insert(0, R)
 
     returns = torch.tensor(returns)
@@ -182,8 +184,8 @@ def main():
             # take the action
             state, reward, done, _ = env.step(action)
 
-            if args.render:
-                env.render()
+            # if args.render:
+            #     env.render()
 
             model.rewards.append(reward)
             ep_reward += reward
@@ -197,7 +199,8 @@ def main():
         finish_episode()
 
         # log results
-        if i_episode % args.log_interval == 0:
+        # if i_episode % args.log_interval == 0:
+        if i_episode % log_interval == 0:
             print(
                 "Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}".format(
                     i_episode, ep_reward, running_reward
