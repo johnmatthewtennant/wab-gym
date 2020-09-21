@@ -26,7 +26,7 @@ default_game_options = {
         4 / 8
     ),  # Best practice: divide max_food by the number of turns it takes to fill your food by gathering
     "food_consumed_per_turn": (
-        4 / 40
+        4 / 1000
     ),  # Best practice: divide max_food by the number of turns it takes to die of starvation
     "starting_food": 4,  # None values will be assigned randomly
     "starting_role": None,  # None values will be assigned randomly
@@ -38,24 +38,6 @@ default_game_options = {
     "wolves_can_move": False,  # True,
     # TODO add reward for eating?
 }
-
-# default_game_options = {
-#     "num_ostriches": 1,
-#     "height": 11,
-#     "width": 11,
-#     "chance_wolf_on_square": 0.01,
-#     "bush_power": 80,
-#     "max_food": 100,
-#     "food_gathered_per_turn": 5,
-#     "food_consumed_per_turn": 1,
-#     "max_berries_per_bush": 200,
-#     "wolf_spawn_distance": 12,
-#     "max_turns": 200,
-#     "wolf_chance_to_despawn": 0.05,
-#     "start_with_wolves": True,
-#     "starting_food": 40,  # None values will be assigned randomly
-#     "starting_role": None,  # None values will be assigned randomly
-# }
 
 action_definitions = pd.DataFrame(
     [
