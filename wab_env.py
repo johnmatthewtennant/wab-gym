@@ -10,8 +10,8 @@ from PIL import Image, ImageDraw
 
 default_game_options = {
     # GYM OPTIONS
-    "reward_per_turn": 0.05,
-    "reward_for_death": -1,
+    "reward_per_turn": 1,
+    "reward_for_death": 1,
     "reward_for_finishing": 1,
     # GAME
     "max_turns": 80,
@@ -30,20 +30,21 @@ default_game_options = {
     "chance_wolf_on_square": 0,  # 0.001,
     "wolf_spawn_margin": 1,
     "wolf_chance_to_despawn": 0.05,
-    "start_with_wolves": False,  # True,
+    "wolves": False,  # True,
     "wolves_can_move": False,  # True,
     # TODO add reward for eating?
 }
 
 action_definitions = pd.DataFrame(
     [
-        {"x": 0, "y": 1, "role": 0},  # up
-        {"x": 1, "y": 0, "role": 0},  # right
-        {"x": 0, "y": -1, "role": 0},  # down
-        {"x": -1, "y": 0, "role": 0},  # left
-        {"x": 0, "y": 0, "role": 0},  # stay
-        {"x": 0, "y": 0, "role": 1},  # switch role
-    ]
+        {"x": 0, "y": 1, "role": None},  # up
+        {"x": 1, "y": 0, "role": None},  # right
+        {"x": 0, "y": -1, "role": None},  # down
+        {"x": -1, "y": 0, "role": None},  # left
+        {"x": 0, "y": 0, "role": 0},  # don't move. Be lookout
+        {"x": 0, "y": 0, "role": 1},  # don't move. Be gatherer
+    ],
+    dtype=int,
 )
 
 
@@ -134,7 +135,7 @@ class WolvesAndBushesEnv(gym.Env):
             starting_role=self.game_options["starting_role"],
         )
         self.generate_bushes()
-        if self.game_options["start_with_wolves"]:
+        if self.game_options["wolves"]:
             self.initialize_wolves()
         self.update_master_df_and_distances()
         return self._get_obs()
@@ -142,10 +143,11 @@ class WolvesAndBushesEnv(gym.Env):
     def step(self, actions):
         self.current_turn += 1
         action_details = action_definitions.iloc[actions]
-        self.ostriches[["x", "y", "role"]] = (
-            self.ostriches[["x", "y", "role"]] + action_details[["x", "y", "role"]]
-        )
-        self.ostriches.role = self.ostriches.role % 2
+        # TODO applying the action will have to be totally rewritten for multiplayer
+        self.ostriches.x = self.ostriches.x + action_details["x"]
+        self.ostriches.y = self.ostriches.y + action_details["y"]
+        if not np.isnan(action_details["role"]):
+            self.ostriches.role = action_details["role"]
         self.generate_bushes()
 
         # wolves probabilistically despawn, remove wolves that fail check
@@ -209,7 +211,8 @@ class WolvesAndBushesEnv(gym.Env):
         self.ostriches.loc[self.ostriches.food <= 0, ["alive_killed_starved", "food"]] = [2, 0]
 
         # wolf spawn
-        self.spawn_wolves()
+        if self.game_options["wolves"]:
+            self.spawn_wolves()
 
         if self.ostriches.iloc[0].alive_killed_starved == 0:
             if self.current_turn >= self.game_options["max_turns"]:
@@ -261,7 +264,7 @@ class WolvesAndBushesEnv(gym.Env):
             round(np.clip(self.ostriches.iloc[0].food, 0, self.game_options["max_food"]))
         )  # TODO food will need to be an array eventually (for multiplayer)
         # print(food)
-        role = self.ostriches.iloc[0].role
+        role = int(self.ostriches.iloc[0].role)
         alive_killed_starved = self.ostriches.iloc[0].alive_killed_starved
         return (wolf_grid, bush_grid, ostrich_grid, food, role, alive_killed_starved)
 
@@ -323,22 +326,30 @@ class WolvesAndBushesEnv(gym.Env):
             candidate_spawn_coords = candidate_spawn_coords | set(
                 itertools.product(
                     range(
-                        ostrich.x
-                        - self.game_options["width"] // 2
-                        - self.game_options["wolf_spawn_margin"],
-                        ostrich.x
-                        + self.game_options["width"] // 2
-                        + self.game_options["wolf_spawn_margin"]
-                        + 1,
+                        int(
+                            ostrich.x
+                            - self.game_options["width"] // 2
+                            - self.game_options["wolf_spawn_margin"]
+                        ),
+                        int(
+                            ostrich.x
+                            + self.game_options["width"] // 2
+                            + self.game_options["wolf_spawn_margin"]
+                            + 1
+                        ),
                     ),
                     range(
-                        ostrich.y
-                        - self.game_options["height"] // 2
-                        - self.game_options["wolf_spawn_margin"],
-                        ostrich.y
-                        + self.game_options["height"] // 2
-                        + self.game_options["wolf_spawn_margin"]
-                        + 1,
+                        int(
+                            ostrich.y
+                            - self.game_options["height"] // 2
+                            - self.game_options["wolf_spawn_margin"]
+                        ),
+                        int(
+                            ostrich.y
+                            + self.game_options["height"] // 2
+                            + self.game_options["wolf_spawn_margin"]
+                            + 1
+                        ),
                     ),
                 )
             )
