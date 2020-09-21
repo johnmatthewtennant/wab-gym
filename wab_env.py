@@ -21,14 +21,10 @@ default_game_options = {
     "bush_power": 100,
     "max_berries_per_bush": 200,
     # FOOD
-    "max_food": 4,  # Food observations are discrete. This sets the resolution the agent's hunger perception
-    "food_gathered_per_turn": (
-        4 / 8
-    ),  # Best practice: divide max_food by the number of turns it takes to fill your food by gathering
-    "food_consumed_per_turn": (
-        4 / 1000
-    ),  # Best practice: divide max_food by the number of turns it takes to die of starvation
-    "starting_food": 4,  # None values will be assigned randomly
+    "max_food": 3,  # Food observations are discrete. This sets the resolution of the agent's hunger perception
+    "turns_to_fill_food": 8,
+    "turns_to_empty_food": 40,
+    "starting_food": 3,  # None values will be assigned randomly
     "starting_role": None,  # None values will be assigned randomly
     # WOLVES
     "chance_wolf_on_square": 0,  # 0.001,
@@ -99,7 +95,8 @@ class WolvesAndBushesEnv(gym.Env):
         self.spec = DummySpec(
             id="WolvesAndBushes-v0",
             max_episode_steps=game_options["max_turns"],
-            reward_threshold=game_options["max_turns"] * game_options["reward_per_turn"] + 1,
+            reward_threshold=(game_options["max_turns"] - 2) * game_options["reward_per_turn"]
+            + game_options["reward_for_finishing"],
         )
         if self.game_options["width"] % 2 == 0 or self.game_options["height"] % 2 == 0:
             raise ValueError("width and height must be odd numbers")
@@ -197,16 +194,16 @@ class WolvesAndBushesEnv(gym.Env):
             & (self.distances.ostrich_alive_killed_starved == 0)
         ]
         if not ostrich_bush_pairs.empty:
-            self.ostriches.loc[ostrich_bush_pairs.ostrich_id, "food"] += self.game_options[
-                "food_gathered_per_turn"
-            ]
+            self.ostriches.loc[ostrich_bush_pairs.ostrich_id, "food"] += (
+                self.game_options["max_food"] / self.game_options["turns_to_fill_food"]
+            )
             # TODO will this work if two ostriches are on the same bush? bush should go down by 2
-            self.bushes.loc[ostrich_bush_pairs.object_id, "food"] -= self.game_options[
-                "food_gathered_per_turn"
-            ]
+            self.bushes.loc[ostrich_bush_pairs.object_id, "food"] -= 1
 
         # ostrich get hungry
-        self.ostriches.food -= self.game_options["food_consumed_per_turn"]
+        self.ostriches.food -= (
+            self.game_options["max_food"] / self.game_options["turns_to_empty_food"]
+        )
 
         # ostrich starve
         self.ostriches.loc[self.ostriches.food <= 0, ["alive_killed_starved", "food"]] = [2, 0]
@@ -261,7 +258,7 @@ class WolvesAndBushesEnv(gym.Env):
         # print(bush_grid)
         # print(wolf_grid)
         food = int(
-            np.clip(self.ostriches.iloc[0].food, 0, self.game_options["max_food"])
+            round(np.clip(self.ostriches.iloc[0].food, 0, self.game_options["max_food"]))
         )  # TODO food will need to be an array eventually (for multiplayer)
         # print(food)
         role = self.ostriches.iloc[0].role

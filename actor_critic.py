@@ -165,7 +165,8 @@ def finish_episode():
 
 
 def main():
-    running_reward = 0
+    running_reward = env.spec.reward_threshold / 2
+    # running_reward = 0
 
     # run inifinitely many episodes
     for i_episode in count(1):
