@@ -262,13 +262,12 @@ class WolvesAndBushesEnv(gym.Env):
             np.array(visible_ostriches.delta_y + self.game_options["height"] // 2, int),
         ] = 1
 
-        turns_to_death = np.ceil(
-            self.ostriches.iloc[0].food * self.game_options["turns_to_empty_food"]
+        turns_to_death = np.maximum(
+            self.ostriches.iloc[0].food * self.game_options["turns_to_empty_food"], 1
         )
-        if turns_to_death == 0:
-            food[0] = 1
-        elif turns_to_death < self.game_options["turns_to_empty_food"] / 2:
-            food[int(np.ceil(np.log2(turns_to_death)))] = 1
+        transformed_food = int(np.ceil(np.log2(turns_to_death)))
+        if transformed_food < len(food):
+            food[transformed_food] = 1
 
         role = int(self.ostriches.iloc[0].role)
         alive_starved_killed = self.ostriches.iloc[0].alive_starved_killed
