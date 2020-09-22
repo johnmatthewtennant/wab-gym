@@ -180,7 +180,8 @@ def main():
         for t in range(1, 10000):
 
             # select action from policy
-            action = select_action(gym.spaces.flatten(env.observation_space, state))
+            state = gym.spaces.flatten(env.observation_space, state)
+            action = select_action(state + np.random.rand(*state.shape) / 100)
 
             # take the action
             state, reward, done, _ = env.step(action)
