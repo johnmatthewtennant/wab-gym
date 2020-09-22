@@ -10,9 +10,10 @@ from PIL import Image, ImageDraw
 
 default_game_options = {
     # GYM OPTIONS
-    "reward_per_turn": 1,
-    "reward_for_death": 1,
-    "reward_for_finishing": 1,
+    "reward_per_turn": 0,
+    "reward_for_death": 0,
+    "reward_for_finishing": 0,
+    "reward_for_eating": 1,
     # GAME
     "max_turns": 80,
     "num_ostriches": 1,
@@ -95,8 +96,9 @@ class WolvesAndBushesEnv(gym.Env):
         self.spec = DummySpec(
             id="WolvesAndBushes-v0",
             max_episode_steps=game_options["max_turns"],
-            reward_threshold=(game_options["max_turns"] - 2) * game_options["reward_per_turn"]
-            + game_options["reward_for_finishing"],
+            # reward_threshold=(game_options["max_turns"] - 2) * game_options["reward_per_turn"]
+            # + game_options["reward_for_finishing"],
+            reward_threshold=80,  # TODO make this less arbitrary
         )
         if self.game_options["width"] % 2 == 0 or self.game_options["height"] % 2 == 0:
             raise ValueError("width and height must be odd numbers")
@@ -145,6 +147,7 @@ class WolvesAndBushesEnv(gym.Env):
         return self._get_obs()
 
     def step(self, actions):
+        reward = 0
         self.current_turn += 1
         action_details = action_definitions.iloc[actions]
         # TODO applying the action will have to be totally rewritten for multiplayer
@@ -205,6 +208,7 @@ class WolvesAndBushesEnv(gym.Env):
             )
             # TODO will this work if two ostriches are on the same bush? bush should go down by 2
             self.bushes.loc[ostrich_bush_pairs.object_id, "food"] -= 1
+            reward += self.game_options["reward_for_eating"]
 
         # ostrich get hungry
         self.ostriches.food -= 1 / self.game_options["turns_to_empty_food"]
@@ -218,13 +222,13 @@ class WolvesAndBushesEnv(gym.Env):
 
         if self.ostriches.iloc[0].alive_starved_killed == 0:
             if self.current_turn >= self.game_options["max_turns"]:
-                reward = self.game_options["reward_for_finishing"]
+                reward += self.game_options["reward_for_finishing"]
                 done = True
             else:
-                reward = self.game_options["reward_per_turn"]
+                reward += self.game_options["reward_per_turn"]
                 done = False
         else:
-            reward = self.game_options["reward_for_death"]
+            reward += self.game_options["reward_for_death"]
             done = True
         return self._get_obs(), reward, done, {}
 
