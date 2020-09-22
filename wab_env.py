@@ -21,10 +21,9 @@ default_game_options = {
     "bush_power": 100,
     "max_berries_per_bush": 200,
     # FOOD
-    "max_food": 3,  # Food observations are discrete. This sets the resolution of the agent's hunger perception
-    "turns_to_fill_food": 8,
-    "turns_to_empty_food": 40,
-    "starting_food": 3,  # None values will be assigned randomly
+    "turns_to_fill_food": 8,  # How many turns of gathering does it take to fill food?
+    "turns_to_empty_food": 40,  # How many turns of not gathering does it take to starve?
+    "starting_food": 1,  # 0 to 1 float. None values will be assigned randomly
     "starting_role": None,  # None values will be assigned randomly
     # WOLVES
     "chance_wolf_on_square": 0,  # 0.001,
@@ -55,7 +54,7 @@ def get_distances_to_everything(ostriches, master_df):
             "x": "ostrich_x",
             "y": "ostrich_y",
             "role": "ostrich_role",
-            "alive_killed_starved": "ostrich_alive_killed_starved",
+            "alive_starved_killed": "ostrich_alive_starved_killed",
         }
     )
     ostriches["ostrich_id"] = ostriches.index
@@ -114,9 +113,14 @@ class WolvesAndBushesEnv(gym.Env):
                 spaces.Box(
                     0, 1, shape=(self.game_options["width"], self.game_options["height"]), dtype=int
                 ),  # ostriches
-                spaces.Discrete(self.game_options["max_food"] + 1),  # current food
+                spaces.Box(
+                    0,
+                    1,
+                    shape=(int(np.ceil(np.log2(self.game_options["turns_to_empty_food"]))),),
+                    dtype=int,
+                ),  # current food
                 spaces.Discrete(2),  # current role
-                spaces.Discrete(3),  # alive, killed, starved
+                spaces.Discrete(3),  # alive, starved, killed
             )
         )
         self.reset()
@@ -125,7 +129,7 @@ class WolvesAndBushesEnv(gym.Env):
         self.current_turn = 0
         # TODO random seed
         self.ostriches = pd.DataFrame(
-            columns=["type", "x", "y", "food", "role", "alive_killed_starved"]
+            columns=["type", "x", "y", "food", "role", "alive_starved_killed"]
         )
         self.bushes = pd.DataFrame(columns=["type", "x", "y", "food"])
         self.wolves = pd.DataFrame(columns=["type", "x", "y"])
@@ -186,35 +190,33 @@ class WolvesAndBushesEnv(gym.Env):
                 (self.distances.taxicab_distance == 0) & (self.distances.object_type == "wolf")
             ]
             if not ostrich_wolf_kills.empty:
-                self.ostriches.loc[ostrich_wolf_kills.ostrich_id, "alive_killed_starved"] = 1
+                self.ostriches.loc[ostrich_wolf_kills.ostrich_id, "alive_starved_killed"] = 2
 
         # ostrich eat
         ostrich_bush_pairs = self.distances[
             (self.distances.taxicab_distance == 0)
             & (self.distances.ostrich_role == 1)  # gatherer
             & (self.distances.object_type == "bush")
-            & (self.distances.ostrich_alive_killed_starved == 0)
+            & (self.distances.ostrich_alive_starved_killed == 0)
         ]
         if not ostrich_bush_pairs.empty:
             self.ostriches.loc[ostrich_bush_pairs.ostrich_id, "food"] += (
-                self.game_options["max_food"] / self.game_options["turns_to_fill_food"]
+                1 / self.game_options["turns_to_fill_food"]
             )
             # TODO will this work if two ostriches are on the same bush? bush should go down by 2
             self.bushes.loc[ostrich_bush_pairs.object_id, "food"] -= 1
 
         # ostrich get hungry
-        self.ostriches.food -= (
-            self.game_options["max_food"] / self.game_options["turns_to_empty_food"]
-        )
+        self.ostriches.food -= 1 / self.game_options["turns_to_empty_food"]
 
         # ostrich starve
-        self.ostriches.loc[self.ostriches.food <= 0, ["alive_killed_starved", "food"]] = [2, 0]
+        self.ostriches.loc[self.ostriches.food <= 0, ["alive_starved_killed", "food"]] = [1, 0]
 
         # wolf spawn
         if self.game_options["wolves"]:
             self.spawn_wolves()
 
-        if self.ostriches.iloc[0].alive_killed_starved == 0:
+        if self.ostriches.iloc[0].alive_starved_killed == 0:
             if self.current_turn >= self.game_options["max_turns"]:
                 reward = self.game_options["reward_for_finishing"]
                 done = True
@@ -230,6 +232,7 @@ class WolvesAndBushesEnv(gym.Env):
         wolf_grid = np.zeros(self.observation_space[0].shape)
         bush_grid = np.zeros(self.observation_space[1].shape)
         ostrich_grid = np.zeros(self.observation_space[2].shape)
+        food = np.zeros(self.observation_space[3].shape)
 
         # TODO fix ostrich_id, especially for multi agent
         visible_objects = self.distances[
@@ -258,19 +261,22 @@ class WolvesAndBushesEnv(gym.Env):
             np.array(visible_ostriches.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_ostriches.delta_y + self.game_options["height"] // 2, int),
         ] = 1
-        # print(bush_grid)
-        # print(wolf_grid)
-        food = int(
-            round(np.clip(self.ostriches.iloc[0].food, 0, self.game_options["max_food"]))
-        )  # TODO food will need to be an array eventually (for multiplayer)
-        # print(food)
+
+        turns_to_death = np.ceil(
+            self.ostriches.iloc[0].food * self.game_options["turns_to_empty_food"]
+        )
+        if turns_to_death == 0:
+            food[0] = 1
+        elif turns_to_death < self.game_options["turns_to_empty_food"] / 2:
+            food[int(np.ceil(np.log2(turns_to_death)))] = 1
+
         role = int(self.ostriches.iloc[0].role)
-        alive_killed_starved = self.ostriches.iloc[0].alive_killed_starved
-        return (wolf_grid, bush_grid, ostrich_grid, food, role, alive_killed_starved)
+        alive_starved_killed = self.ostriches.iloc[0].alive_starved_killed
+        return (wolf_grid, bush_grid, ostrich_grid, food, role, alive_starved_killed)
 
     def render(self, mode="rgb_array", scale=32, draw_health=True):
         # This is for rendering video. Bushes are green, wolves red, ostriches blue
-        wolves, bushes, ostriches, food, role, alive_killed_starved = self._get_obs()
+        wolves, bushes, ostriches, food, role, alive_starved_killed = self._get_obs()
         image = np.zeros(
             (self.game_options["width"], self.game_options["height"], 3), dtype="uint8"
         )
@@ -278,7 +284,7 @@ class WolvesAndBushesEnv(gym.Env):
         image[:, :, 0] = 255 * wolves
         image[:, :, 1] = 255 * bushes
         image[:, :, 2] = 255 * ostriches
-        if alive_killed_starved == 1:
+        if alive_starved_killed == 2:
             empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
             image[empty] = 127
         if role == 0:
@@ -386,8 +392,7 @@ class WolvesAndBushesEnv(gym.Env):
 
     def spawn_ostriches(self, starting_food=None, starting_role=None):
         if starting_food is None:
-            # starting_food = np.random.random()
-            starting_food = np.random.randint(1, self.game_options["max_food"] + 1)
+            starting_food = np.random.random()
         if starting_role is None:
             starting_role = np.random.randint(2)
         # TODO multiple playersp
@@ -398,7 +403,7 @@ class WolvesAndBushesEnv(gym.Env):
                 "y": 0,
                 "food": starting_food,
                 "role": starting_role,
-                "alive_killed_starved": 0,
+                "alive_starved_killed": 0,
             },
             ignore_index=True,
         )
