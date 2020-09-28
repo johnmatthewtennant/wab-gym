@@ -17,7 +17,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-from wab_env import WolvesAndBushesEnv
+from wab_env import WolvesAndBushesEnv, WolvesAndBushesEnvEgocentric
 
 # parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 # parser.add_argument(
@@ -37,8 +37,8 @@ from wab_env import WolvesAndBushesEnv
 gamma = 0.99
 log_interval = 10
 
-env = WolvesAndBushesEnv()
-
+# env = WolvesAndBushesEnv()
+env = WolvesAndBushesEnvEgocentric()
 # env.seed(args.seed)
 # torch.manual_seed(args.seed)
 

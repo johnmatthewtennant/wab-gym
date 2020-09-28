@@ -32,7 +32,6 @@ default_game_options = {
     "wolf_chance_to_despawn": 0.05,
     "wolves": False,  # True,
     "wolves_can_move": False,  # True,
-    # TODO add reward for eating?
 }
 
 action_definitions = pd.DataFrame(
@@ -68,13 +67,29 @@ def get_distances_to_everything(ostriches, master_df):
     both["delta_x"] = both["ostrich_x"] - both["object_x"]
     both["delta_y"] = both["ostrich_y"] - both["object_y"]
     both["taxicab_distance"] = (abs(both["delta_x"]) + abs(both["delta_y"])).astype(int)
-    both["point_distance"] = (both["delta_x"] ** 2 + both["delta_y"] ** 2) ** 0.5
+    # both["point_distance"] = (both["delta_x"] ** 2 + both["delta_y"] ** 2) ** 0.5
     return both
 
 
 def assemble_master_df(ostriches, bushes, wolves):
     master_df = pd.concat([wolves, bushes, ostriches])
     return master_df
+
+
+def generate_potential_actions(player=None):
+    if player is None:
+        player = {"x": 0, "y": 0}
+
+    # up, right, down, left, stay (clockwise)
+    potential_coords = [
+        [player["x"], player["y"] + 1],
+        [player["x"] + 1, player["y"]],
+        [player["x"], player["y"] - 1],
+        [player["x"] - 1, player["y"]],
+        [player["x"], player["y"]],
+    ]
+    potential_actions = pd.DataFrame(potential_coords, columns=["x", "y"])
+    return potential_actions
 
 
 class DummySpec:
@@ -104,6 +119,10 @@ class WolvesAndBushesEnv(gym.Env):
             raise ValueError("width and height must be odd numbers")
         # TODO action space will need to be tuple for multiple agents
         self.action_space = spaces.Discrete(6)  # up, right, down, left, stay, switch roles
+        self.initialize_observation_space()
+        self.reset()
+
+    def initialize_observation_space(self):
         self.observation_space = spaces.Tuple(
             (
                 spaces.Box(
@@ -125,7 +144,6 @@ class WolvesAndBushesEnv(gym.Env):
                 spaces.Discrete(3),  # alive, starved, killed
             )
         )
-        self.reset()
 
     def reset(self):
         self.current_turn = 0
@@ -233,12 +251,56 @@ class WolvesAndBushesEnv(gym.Env):
         return self._get_obs(), reward, done, {}
 
     def _get_obs(self):
-        wolf_grid = np.zeros(self.observation_space[0].shape)
-        bush_grid = np.zeros(self.observation_space[1].shape)
-        ostrich_grid = np.zeros(self.observation_space[2].shape)
-        food = np.zeros(self.observation_space[3].shape)
+        return (
+            self._get_wolf_grid(),
+            self._get_bush_grid(),
+            self._get_ostrich_grid(),
+            self._get_one_hot_food(),
+            self._get_role_obs(),
+            self._get_alive_starved_killed_obs(),
+        )
 
-        # TODO fix ostrich_id, especially for multi agent
+    def _get_alive_starved_killed_obs(self):
+        return self.ostriches.iloc[0].alive_starved_killed
+
+    def _get_role_obs(self):
+        return int(self.ostriches.iloc[0].role)
+
+    def _get_ostrich_grid(self):
+        ostrich_grid = np.zeros((self.game_options["width"], self.game_options["height"]))
+        # TODO combine these next two lines
+        visible_objects = self.distances[
+            (self.distances.ostrich_id == 0)
+            & (abs(self.distances.delta_x) < self.game_options["width"] / 2)
+            & (abs(self.distances.delta_y) < self.game_options["height"] / 2)
+        ]
+        visible_ostriches = visible_objects[(visible_objects.object_type == "ostrich")]
+        ostrich_grid[
+            np.array(visible_ostriches.delta_x + self.game_options["width"] // 2, int),
+            np.array(visible_ostriches.delta_y + self.game_options["height"] // 2, int),
+        ] = 1
+        return ostrich_grid
+
+    def _get_wolf_grid(self):
+        wolf_grid = np.zeros((self.game_options["width"], self.game_options["height"]))
+        # TODO combine these next two lines
+        visible_objects = self.distances[
+            (self.distances.ostrich_id == 0)
+            & (abs(self.distances.delta_x) < self.game_options["width"] / 2)
+            & (abs(self.distances.delta_y) < self.game_options["height"] / 2)
+        ]
+        visible_wolves = visible_objects[
+            (visible_objects.object_type == "wolf") & (visible_objects.ostrich_role == 0)  # lookout
+        ]
+        wolf_grid[
+            np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
+            np.array(visible_wolves.delta_y + self.game_options["height"] // 2, int),
+        ] = 1
+        return wolf_grid
+
+    def _get_bush_grid(self):
+        bush_grid = np.zeros((self.game_options["width"], self.game_options["height"]))
+        # TODO combine these next two lines
         visible_objects = self.distances[
             (self.distances.ostrich_id == 0)
             & (abs(self.distances.delta_x) < self.game_options["width"] / 2)
@@ -249,37 +311,30 @@ class WolvesAndBushesEnv(gym.Env):
             np.array(visible_bushes.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_bushes.delta_y + self.game_options["height"] // 2, int),
         ] = 1
-        if self.game_options.get("debug"):
-            visible_wolves = visible_objects[(visible_objects.object_type == "wolf")]
-        else:
-            visible_wolves = visible_objects[
-                (visible_objects.object_type == "wolf")
-                & (visible_objects.ostrich_role == 0)  # lookout
-            ]
-        wolf_grid[
-            np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
-            np.array(visible_wolves.delta_y + self.game_options["height"] // 2, int),
-        ] = 1
-        visible_ostriches = visible_objects[(visible_objects.object_type == "ostrich")]
-        ostrich_grid[
-            np.array(visible_ostriches.delta_x + self.game_options["width"] // 2, int),
-            np.array(visible_ostriches.delta_y + self.game_options["height"] // 2, int),
-        ] = 1
+        return bush_grid
 
+    def _get_one_hot_food(self):
+        food = np.zeros(
+            (int(np.ceil(np.log2(self.game_options["turns_to_empty_food"]))),), dtype=int
+        )
         turns_to_death = np.maximum(
             self.ostriches.iloc[0].food * self.game_options["turns_to_empty_food"], 1
         )
         transformed_food = int(np.ceil(np.log2(turns_to_death)))
         if transformed_food < len(food):
             food[transformed_food] = 1
-
-        role = int(self.ostriches.iloc[0].role)
-        alive_starved_killed = self.ostriches.iloc[0].alive_starved_killed
-        return (wolf_grid, bush_grid, ostrich_grid, food, role, alive_starved_killed)
+        return food
 
     def render(self, mode="rgb_array", scale=32, draw_health=True):
         # This is for rendering video. Bushes are green, wolves red, ostriches blue
-        wolves, bushes, ostriches, food, role, alive_starved_killed = self._get_obs()
+        wolves = self._get_wolf_grid()
+        bushes = self._get_bush_grid()
+        ostriches = self._get_ostrich_grid()
+        food = round(self.ostriches.iloc[0].food, 2)
+        role = self.ostriches.iloc[0].role
+        alive_starved_killed = self.ostriches.iloc[0].alive_starved_killed
+
+        # wolves, bushes, ostriches, food, role, alive_starved_killed = self._get_obs()
         image = np.zeros(
             (self.game_options["width"], self.game_options["height"], 3), dtype="uint8"
         )
@@ -436,6 +491,66 @@ class WolvesAndBushesEnv(gym.Env):
         )
 
 
+class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
+    def initialize_observation_space(self):
+        self.max_distance = (
+            self.game_options["width"] // 2 + self.game_options["height"] // 2 + 1
+        )  # this is the maximum taxicab distance any object on screen can be from any of the squares the ostrich can reach on the next turn
+        self.observation_space = spaces.Tuple(
+            (
+                spaces.Box(
+                    0, 1, shape=(5,), dtype=float
+                ),  # values = (self.max_distance - distance_to_nearest_wolf[up,right,down,left,stay]) / self.max_distance
+                spaces.Box(
+                    0, self.max_distance, shape=(5,), dtype=float
+                ),  # values = (self.max_distance - distance_to_nearest_bush[up,right,down,left,stay]) / self.max_distance
+                spaces.Box(
+                    0,
+                    1,
+                    shape=(int(np.ceil(np.log2(self.game_options["turns_to_empty_food"]))),),
+                    dtype=int,
+                ),  # current food
+                spaces.Discrete(2),  # current role
+                spaces.Discrete(3),  # alive, starved, killed
+            )
+        )
+
+    def _get_obs(self):
+        # TODO just override _get_wolf_obs, _get_bush_obs, and _get_ostrich_obs
+        potential_actions = generate_potential_actions(self.ostriches.iloc[0])
+        distances = get_distances_to_everything(potential_actions, self.master_df)
+        if not self.wolves.empty:
+            potential_actions["wolf_distance"] = (
+                self.master_df.loc[self.master_df["type"] == "wolf"]
+                .groupby(
+                    ["ostrich_id"]
+                )  # TODO ostrich_id here is actually action_id and should be renamed as such
+                .agg({"taxicab_distance": "min"})
+            )["taxicab_distance"]
+        else:
+            potential_actions["wolf_distance"] = self.max_distance
+        if not self.bushes[self.bushes.food > 0].empty:
+            potential_actions["bush_distance"] = (
+                distances.loc[distances["object_type"] == "bush"]
+                .groupby(
+                    ["ostrich_id"]
+                )  # TODO ostrich_id here is actually action_id and should be renamed as such
+                .agg({"taxicab_distance": "min"})
+            )["taxicab_distance"]
+        else:
+            potential_actions["bush_distance"] = self.max_distance
+        # TODO use integer values and write an observation wrapper for the env that generates neural net-friendly output (-1 to 1)
+        wolves = (self.max_distance - potential_actions.wolf_distance) / self.max_distance
+        # TODO use integer values and write an observation wrapper for the env that generates neural net-friendly output (-1 to 1)
+        bushes = (self.max_distance - potential_actions.bush_distance) / self.max_distance
+        food = self._get_one_hot_food()
+        role = self._get_role_obs()
+        alive_starved_killed = self._get_alive_starved_killed_obs()
+        obs = (wolves, bushes, food, role, alive_starved_killed)
+        # print(obs)
+        return obs
+
+
 class RandomAgent(object):
     """The world's simplest agent!"""
 
@@ -457,7 +572,8 @@ if __name__ == "__main__":
     # want to change the amount of output.
     logger.set_level(logger.INFO)
 
-    env = WolvesAndBushesEnv()
+    # env = WolvesAndBushesEnv()
+    env = WolvesAndBushesEnvEgocentric()
 
     # You provide the directory to write to (can be an existing
     # directory, including one with existing data -- all monitor files
