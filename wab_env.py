@@ -491,6 +491,63 @@ class WolvesAndBushesEnv(gym.Env):
         )
 
 
+class NNFriendlyObsWrapper(gym.ObservationWrapper):
+    """ A wrapper class used to convert observation space data to
+    a generalized format.
+    """
+
+    def __init__(self, env: gym.Env):
+        """ Initialize a new wrapper instance
+        :param env: The environment from which the observations space data
+        will be collected.
+        """
+        super().__init__(env)
+        self.env = env
+        self.max_distance = (self.game_options["width"] // 2 +
+                             self.game_options["height"] // 2 + 1)
+
+    def _get_condensed_taxicabs(self, ob):
+        # assuming when the input is a np.ndarray it is a 0/1 map
+        if isinstance(ob, np.ndarray):
+            indexes = np.where(ob == 1)
+            ob = np.empty(len(indexes[0]))
+
+            for j in range(len(indexes[0])):
+                taxicab = abs(indexes[0][j] - self.game_options["width"] // 2) + \
+                          abs(indexes[1][j] - self.game_options["height"] // 2)
+                # we use * 2 - 1 here to adjust the value for [-1, 1]
+                ob.append(
+                    ((self.max_distance - taxicab) / self.max_distance * 2) - 1
+                )
+        return ob
+
+    def observation(self, obs):
+        """Adjust all observations values in obs to be neural net friendly
+        (i.e. 1D array where all values are between -1 and 1).
+        """
+
+        wolves = self._get_condensed_taxicabs(obs[0])
+
+        bushes = self._get_condensed_taxicabs(obs[1])
+
+        # Comment below if not using ostriches as part of the observations. Also
+        #   must adjust indexes accordingly if this is the case.
+        #ostriches = self._get_condensed_taxicabs(obs[2])
+
+        # assuming food is already one-hot encoded
+        food = obs[2]
+
+        # assuming role is either 0 or 1
+        role = obs[3]
+
+        # subtracting 1 for NN friendlyness ([0, 2] -> [-1, 1])
+        alive_starved_killed = obs[4] - 1
+
+        return np.concatenate((wolves, bushes, food, np.array([role]),
+                               np.array([alive_starved_killed])))
+
+
+
 class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
     def initialize_observation_space(self):
         self.max_distance = (
@@ -573,7 +630,7 @@ if __name__ == "__main__":
     logger.set_level(logger.INFO)
 
     # env = WolvesAndBushesEnv()
-    env = WolvesAndBushesEnvEgocentric()
+    env = NNFriendlyObsWrapper(WolvesAndBushesEnvEgocentric())
 
     # You provide the directory to write to (can be an existing
     # directory, including one with existing data -- all monitor files
