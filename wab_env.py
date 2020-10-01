@@ -95,7 +95,12 @@ def generate_potential_actions(player=None):
 class DummySpec:
     # TODO don't use this dummy spec
     def __init__(
-        self, id, reward_threshold=None, nondeterministic=False, max_episode_steps=None, kwargs=None
+        self,
+        id,
+        reward_threshold=None,
+        nondeterministic=False,
+        max_episode_steps=None,
+        kwargs=None,
     ):
         self.id = id
         self.reward_threshold = reward_threshold
@@ -126,13 +131,31 @@ class WolvesAndBushesEnv(gym.Env):
         self.observation_space = spaces.Tuple(
             (
                 spaces.Box(
-                    0, 1, shape=(self.game_options["width"], self.game_options["height"]), dtype=int
+                    0,
+                    1,
+                    shape=(
+                        self.game_options["width"],
+                        self.game_options["height"],
+                    ),
+                    dtype=int,
                 ),  # wolves
                 spaces.Box(
-                    0, 1, shape=(self.game_options["width"], self.game_options["height"]), dtype=int
+                    0,
+                    1,
+                    shape=(
+                        self.game_options["width"],
+                        self.game_options["height"],
+                    ),
+                    dtype=int,
                 ),  # bushes
                 spaces.Box(
-                    0, 1, shape=(self.game_options["width"], self.game_options["height"]), dtype=int
+                    0,
+                    1,
+                    shape=(
+                        self.game_options["width"],
+                        self.game_options["height"],
+                    ),
+                    dtype=int,
                 ),  # ostriches
                 spaces.Box(
                     0,
@@ -232,7 +255,10 @@ class WolvesAndBushesEnv(gym.Env):
         self.ostriches.food -= 1 / self.game_options["turns_to_empty_food"]
 
         # ostrich starve
-        self.ostriches.loc[self.ostriches.food <= 0, ["alive_starved_killed", "food"]] = [1, 0]
+        self.ostriches.loc[self.ostriches.food <= 0, ["alive_starved_killed", "food"]] = [
+            1,
+            0,
+        ]
 
         # wolf spawn
         if self.game_options["wolves"]:
@@ -280,7 +306,10 @@ class WolvesAndBushesEnv(gym.Env):
         visible_ostriches = visible_objects[(visible_objects.object_type == "ostrich")]
         ostrich_grid[
             np.array(visible_ostriches.delta_x + self.game_options["width"] // 2, int),
-            np.array(visible_ostriches.delta_y + self.game_options["height"] // 2, int),
+            np.array(
+                visible_ostriches.delta_y + self.game_options["height"] // 2,
+                int,
+            ),
         ] = 1
         return ostrich_grid
 
@@ -327,10 +356,12 @@ class WolvesAndBushesEnv(gym.Env):
 
     def _get_one_hot_food(self) -> np.ndarray:
         food = np.zeros(
-            (int(np.ceil(np.log2(self.game_options["turns_to_empty_food"]))),), dtype=int
+            (int(np.ceil(np.log2(self.game_options["turns_to_empty_food"]))),),
+            dtype=int,
         )
         turns_to_death = np.maximum(
-            self.ostriches.iloc[0].food * self.game_options["turns_to_empty_food"], 1
+            self.ostriches.iloc[0].food * self.game_options["turns_to_empty_food"],
+            1,
         )
         transformed_food = int(np.ceil(np.log2(turns_to_death)))
         if transformed_food < len(food):
@@ -348,7 +379,8 @@ class WolvesAndBushesEnv(gym.Env):
 
         # wolves, bushes, ostriches, food, role, alive_starved_killed = self._get_obs()
         image = np.zeros(
-            (self.game_options["width"], self.game_options["height"], 3), dtype="uint8"
+            (self.game_options["width"], self.game_options["height"], 3),
+            dtype="uint8",
         )
 
         image[:, :, 0] = 255 * wolves
@@ -606,19 +638,18 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
 
 
 class NNFriendlyObsWrapper(gym.ObservationWrapper):
-    """ A wrapper class used to convert observation space data to
+    """A wrapper class used to convert observation space data to
     a generalized format.
     """
 
     def __init__(self, env: gym.Env):
-        """ Initialize a new wrapper instance
+        """Initialize a new wrapper instance
         :param env: The environment from which the observations space data
         will be collected.
         """
         super().__init__(env)
         self.env = env
-        self.max_distance = (self.game_options["width"] // 2 +
-                             self.game_options["height"] // 2 + 1)
+        self.max_distance = self.game_options["width"] // 2 + self.game_options["height"] // 2 + 1
 
     def _get_condensed_taxicabs(self, ob):
         # assuming when the input is a np.ndarray it is a 0/1 map
@@ -627,12 +658,14 @@ class NNFriendlyObsWrapper(gym.ObservationWrapper):
             ob = np.empty(len(indexes[0]))
 
             for j in range(len(indexes[0])):
+
                 taxicab = abs(indexes[0][j] - self.game_options["height"] // 2) + \
                           abs(indexes[1][j] - self.game_options["width"] // 2)
                 # we use * 2 - 1 here to adjust the value for [-1, 1]
-                ob.append(
-                    ((self.max_distance - taxicab) / self.max_distance * 2) - 1
-                )
+
+                # we use * 2 - 1 here to adjust the value for [-1, 1]
+                ob.append(((self.max_distance - taxicab) / self.max_distance * 2) - 1)
+                
         return ob
 
     def observation(self, obs):
@@ -646,7 +679,7 @@ class NNFriendlyObsWrapper(gym.ObservationWrapper):
 
         # Comment below if not using ostriches as part of the observations. Also
         #   must adjust indexes accordingly if this is the case.
-        #ostriches = self._get_condensed_taxicabs(obs[2])
+        # ostriches = self._get_condensed_taxicabs(obs[2])
 
 
         food = obs[2]
@@ -669,11 +702,15 @@ class NNFriendlyObsWrapper(gym.ObservationWrapper):
 
         # subtracting 1 for NN friendlyness ([0, 2] -> [-1, 1])
         alive_starved_killed = obs[4] - 1
-
-        obs = np.concatenate((wolves, bushes, food, np.array([role]),
-                              np.array([alive_starved_killed])))
-        assert (obs <= 1).all() and (-1 <= obs).all()
-        return obs
+        return np.concatenate(
+            (
+                wolves,
+                bushes,
+                food,
+                np.array([role]),
+                np.array([alive_starved_killed]),
+            )
+        )
 
 
 class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
@@ -684,11 +721,11 @@ class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
         self.observation_space = spaces.Tuple(
             (
                 spaces.Box(
-                    0, 1, shape=(5,), dtype=float
-                ),  # values = (self.max_distance - distance_to_nearest_wolf[up,right,down,left,stay]) / self.max_distance
+                    0, self.max_distance, shape=(5,), dtype=int
+                ),  # values = (self.max_distance - distance_to_nearest_wolf[up,right,down,left,stay])
                 spaces.Box(
-                    0, self.max_distance, shape=(5,), dtype=float
-                ),  # values = (self.max_distance - distance_to_nearest_bush[up,right,down,left,stay]) / self.max_distance
+                    0, self.max_distance, shape=(5,), dtype=int
+                ),  # values = (self.max_distance - distance_to_nearest_bush[up,right,down,left,stay])
                 spaces.Box(
                     0,
                     1,
@@ -725,9 +762,9 @@ class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
         else:
             potential_actions["bush_distance"] = self.max_distance
         # TODO use integer values and write an observation wrapper for the env that generates neural net-friendly output (-1 to 1)
-        wolves = (self.max_distance - potential_actions.wolf_distance) / self.max_distance
+        wolves = self.max_distance - potential_actions.wolf_distance
         # TODO use integer values and write an observation wrapper for the env that generates neural net-friendly output (-1 to 1)
-        bushes = (self.max_distance - potential_actions.bush_distance) / self.max_distance
+        bushes = self.max_distance - potential_actions.bush_distance
         food = self._get_one_hot_food()
         role = self._get_role_obs()
         alive_starved_killed = self._get_alive_starved_killed_obs()
@@ -757,8 +794,8 @@ if __name__ == "__main__":
     # want to change the amount of output.
     logger.set_level(logger.INFO)
 
-    # env = WolvesAndBushesEnv()
-    env = NNFriendlyObsWrapper(WolvesAndBushesEnvEgocentric())
+    env = WolvesAndBushesEnvEgocentric()
+    # env = NNFriendlyObsWrapper(WolvesAndBushesEnvEgocentric())
 
     # You provide the directory to write to (can be an existing
     # directory, including one with existing data -- all monitor files
