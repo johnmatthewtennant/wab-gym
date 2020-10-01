@@ -543,9 +543,10 @@ class NNFriendlyObsWrapper(gym.ObservationWrapper):
         # subtracting 1 for NN friendlyness ([0, 2] -> [-1, 1])
         alive_starved_killed = obs[4] - 1
 
-        return np.concatenate((wolves, bushes, food, np.array([role]),
-                               np.array([alive_starved_killed])))
-
+        obs = np.concatenate((wolves, bushes, food, np.array([role]),
+                              np.array([alive_starved_killed])))
+        assert (obs <= 1).all() and (-1 <= obs).all()
+        return obs
 
 
 class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
