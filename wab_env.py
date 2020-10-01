@@ -255,7 +255,10 @@ class WolvesAndBushesEnv(gym.Env):
             self._get_wolf_grid(),
             self._get_bush_grid(),
             self._get_ostrich_grid(),
-            self._get_one_hot_food(),
+            #here are the three ways of representing food, Not sure which is best
+            #self._get_one_hot_food(),
+            self._get_food_quantity(),
+            #self._get_turns_until_starve(),
             self._get_role_obs(),
             self._get_alive_starved_killed_obs(),
         )
@@ -313,7 +316,16 @@ class WolvesAndBushesEnv(gym.Env):
         ] = 1
         return bush_grid
 
-    def _get_one_hot_food(self):
+    def _get_food_quantity(self) -> float:
+        #Returns food value as a float between 0 and 1
+        return self.ostriches.iloc[0].food
+
+    def _get_turns_until_starve(self) -> int:
+        #returns an integer denoting the number of turns until starvation
+        return int(np.maximum(self.ostriches.iloc[0].food *
+                   self.game_options["turns_to_empty_food"], 1))
+
+    def _get_one_hot_food(self) -> np.ndarray:
         food = np.zeros(
             (int(np.ceil(np.log2(self.game_options["turns_to_empty_food"]))),), dtype=int
         )
@@ -490,6 +502,108 @@ class WolvesAndBushesEnv(gym.Env):
             * self.game_options["max_berries_per_bush"]
         )
 
+class PragmaticObsWrapper(gym.ObservationWrapper):
+    """ A wrapper class that outputs the following obs:
+    nearest_wolf:
+        A list of four quantities ([up, down, right, left]), denoting the
+        distance in each direction from the closest wolf. if the player
+        exists at [5][5], and the nearest wolf is located at [7, 9]
+        (both given from the top-left corner), then
+        nearest_wolf would be: [0, 4, 0, 2]
+
+    num_wolves:
+        A list of four quantities, each describing the number of wolves in
+        all four directions ([up, down, right, left]) relative to the player.
+        For example, for a grid like:
+        [[0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, x, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, w, 0, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]]
+
+        num_wolves would be: [4, 3, 3, 3] (wolves can count in more than one zone)
+
+    nearest_bush:
+        same as nearest_wolf but for bushes
+
+    num_bushes:
+        same as num_wolves but for bushes
+
+    food:
+        an integer representing the number of turns until starving
+
+    role and alive_starved_killed are the same as always.
+
+    """
+    def __init__(self, env: gym.Env):
+        super().__init__(env)
+        self.env = env
+        self.max_distance = (self.game_options["width"] // 2 +
+                             self.game_options["height"] // 2 + 1)
+
+    def observation(self, obs):
+
+        #wolves = _get_num_things_each_direction(obs[0])
+        wolves = _get_nearest_thing(obs[0])
+
+        #bushes = _get_num_things_each_direction(obs[1])
+        bushes = _get_nearest_thing(obs[1])
+
+        #ostriches = _get_num_things_each_direction(obs[2])
+        ostriches = _get_nearest_thing(obs[2])
+
+        #assuming food has int output (turns until starving
+        food = obs[3]
+
+        role = obs[4]
+        alive_starved_killed = obs[5]
+
+        return wolves, bushes, ostriches, food, role, alive_starved_killed
+
+    def _get_nearest_thing(self, binary_map: np.ndarray):
+        # abstracted so this method can be used with wolf maps, bush maps,
+        #   and possibly ostrich maps in the future
+
+        # indexes is a tuple of two np.ndarrays, the first denoting the rows
+        #   and the second denoting the columns of each wolf (.
+        indexes = np.where(binary_map == 1)
+        shortest_taxicab = self.max_distance
+        shortest_taxicab_indexes = [0, 0]
+        for j in range(len(indexes[0])):
+            relative_row = indexes[0][j] - self.game_options["height"] // 2
+            relative_column = indexes[0][j] - self.game_options["width"] // 2
+            taxicab = abs(relative_row) + abs(relative_column)
+            if taxicab < shortest_taxicab:
+                shortest_taxicab = taxicab
+                shortest_taxicab_indexes[0] = relative_row
+                shortest_taxicab_indexes[1] = relative_column
+
+        up = max(shortest_taxicab_indexes[0], 0)
+        down = abs(min(shortest_taxicab_indexes[0], 0))
+        right = max(shortest_taxicab_indexes[1], 0)
+        left = abs(min(shortest_taxicab_indexes[1], 0))
+
+        return [up, down, right, left]
+
+    def _get_num_things_each_direction(self, binary_map):
+        # also abstracted for the same reason as _get_nearest_thing
+        half_row_index = self.game_options["height"] // 2
+        half_column_index = self.game_options["width"] // 2
+
+        up = np.count_nonzero(binary_map[0:half_row_index] == 1)
+        down = np.count_nonzero(binary_map[half_row_index + 1:])
+        right = np.count_nonzero(binary_map[0:][0:half_column_index])
+        left = np.count_nonzero(binary_map[0:][half_column_index + 1:])
+
+        return [up, down, right, left]
+
+
 
 class NNFriendlyObsWrapper(gym.ObservationWrapper):
     """ A wrapper class used to convert observation space data to
@@ -513,8 +627,8 @@ class NNFriendlyObsWrapper(gym.ObservationWrapper):
             ob = np.empty(len(indexes[0]))
 
             for j in range(len(indexes[0])):
-                taxicab = abs(indexes[0][j] - self.game_options["width"] // 2) + \
-                          abs(indexes[1][j] - self.game_options["height"] // 2)
+                taxicab = abs(indexes[0][j] - self.game_options["height"] // 2) + \
+                          abs(indexes[1][j] - self.game_options["width"] // 2)
                 # we use * 2 - 1 here to adjust the value for [-1, 1]
                 ob.append(
                     ((self.max_distance - taxicab) / self.max_distance * 2) - 1
@@ -534,8 +648,21 @@ class NNFriendlyObsWrapper(gym.ObservationWrapper):
         #   must adjust indexes accordingly if this is the case.
         #ostriches = self._get_condensed_taxicabs(obs[2])
 
-        # assuming food is already one-hot encoded
+
         food = obs[2]
+
+        if isintance(food, int) or isinstance(food, float):
+            if isinstance(food, float):
+                food = int(np.maximum(food *
+                                      self.game_options["turns_to_empty_food"],
+                                      1))
+            # here food is an int
+            one_hot = np.zeros(food)
+            transformed_food = int(np.ceil(np.log2(food)))
+            if transformed_food < len(food):
+                one_hot[transformed_food] = 1
+            food = one_hot
+
 
         # assuming role is either 0 or 1
         role = obs[3]
