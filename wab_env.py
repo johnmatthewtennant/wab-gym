@@ -665,7 +665,7 @@ class NNFriendlyObsWrapper(gym.ObservationWrapper):
 
                 # we use * 2 - 1 here to adjust the value for [-1, 1]
                 ob.append(((self.max_distance - taxicab) / self.max_distance * 2) - 1)
-                
+
         return ob
 
     def observation(self, obs):
