@@ -531,6 +531,37 @@ class WolvesAndBushesEnv(gym.Env):
             * self.game_options["max_berries_per_bush"]
         )
 
+    def _get_wolf_proximities(self):
+        if not self.wolves.empty:
+            potential_actions = generate_potential_actions(self.ostriches.iloc[0])
+            distances = get_distances_to_everything(potential_actions, self.wolves.copy())
+            wolf_distance = (
+                distances.groupby(
+                    ["ostrich_id"]
+                ).agg(  # TODO ostrich_id here is actually action_id and should be renamed as such
+                    {"taxicab_distance": "min"}
+                )
+            )["taxicab_distance"]
+        else:
+            wolf_distance = pd.Series([0] * 5)
+        return self.max_distance - wolf_distance
+
+    def _get_bush_proximities(self):
+        if not self.bushes[self.bushes.food > 0].empty:
+            potential_actions = generate_potential_actions(self.ostriches.iloc[0])
+            bushes = self.bushes.loc[self.bushes.food > 0].copy()
+            distances = get_distances_to_everything(potential_actions, bushes)
+            bush_distance = (
+                distances.groupby(
+                    ["ostrich_id"]
+                ).agg(  # TODO ostrich_id here is actually action_id and should be renamed as such
+                    {"taxicab_distance": "min"}
+                )
+            )["taxicab_distance"]
+        else:
+            bush_distance = pd.Series([0] * 5)
+        return self.max_distance - bush_distance
+
 
 class PragmaticObsWrapper(gym.ObservationWrapper):
     """A wrapper class that outputs the following obs:
@@ -763,12 +794,12 @@ class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
         )  # this is the maximum taxicab distance any object on screen can be from any of the squares the ostrich can reach on the next turn
         self.observation_space = spaces.Tuple(
             (
-                # spaces.Tuple(
-                #     [spaces.Discrete(self.max_distance)] * 5
-                # ), # proximity of nearest wolf
                 spaces.Tuple(
                     [spaces.Discrete(self.max_distance + 1)] * 5
-                ),  # proximity of nearest bush
+                ),  # proximity to nearest wolves
+                spaces.Tuple(
+                    [spaces.Discrete(self.max_distance + 1)] * 5
+                ),  # proximities to nearest bushes
                 spaces.Discrete(self.game_options["turns_to_empty_food"] + 1),  # current food
                 spaces.Discrete(2),  # current role
                 spaces.Discrete(3),  # alive, starved, killed
@@ -776,36 +807,51 @@ class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
         )
 
     def _get_obs(self):
-        # TODO just override _get_wolf_obs, _get_bush_obs, and _get_ostrich_obs
-        potential_actions = generate_potential_actions(self.ostriches.iloc[0])
-        distances = get_distances_to_everything(potential_actions, self.master_df)
-        if not self.wolves.empty:
-            potential_actions["wolf_distance"] = (
-                self.master_df.loc[self.master_df["type"] == "wolf"]
-                .groupby(
-                    ["ostrich_id"]
-                )  # TODO ostrich_id here is actually action_id and should be renamed as such
-                .agg({"taxicab_distance": "min"})
-            )["taxicab_distance"]
-        else:
-            potential_actions["wolf_distance"] = self.max_distance
-        if not self.bushes[self.bushes.food > 0].empty:
-            potential_actions["bush_distance"] = (
-                distances.loc[distances["object_type"] == "bush"]
-                .groupby(
-                    ["ostrich_id"]
-                )  # TODO ostrich_id here is actually action_id and should be renamed as such
-                .agg({"taxicab_distance": "min"})
-            )["taxicab_distance"]
-        else:
-            potential_actions["bush_distance"] = self.max_distance
-        # wolves = self.max_distance - potential_actions.wolf_distance
-        bushes = self.max_distance - potential_actions.bush_distance
+        wolves = self._get_wolf_proximities()
+        bushes = self._get_bush_proximities()
         food = self._get_turns_until_starve()
         role = self._get_role_obs()
         alive_starved_killed = self._get_alive_starved_killed_obs()
-        obs = (bushes, food, role, alive_starved_killed)
+        obs = (wolves, bushes, food, role, alive_starved_killed)
         return obs
+
+    def _get_raw_obs(self):
+        return super()._get_obs(self)
+
+    def render(self, mode="rgb_array", scale=32, draw_health=True):
+        # This is for rendering video. Bushes are green, wolves red, ostriches blue
+        wolf_proximity, bush_proximity, food, role, alive_starved_killed = self._get_obs()
+        wolves = self._get_wolf_grid()
+        bushes = self._get_bush_grid()
+        ostriches = self._get_ostrich_grid()
+        food = self._get_turns_until_starve()
+        role = self.ostriches.iloc[0].role
+        alive_starved_killed = self.ostriches.iloc[0].alive_starved_killed
+
+        # wolves, bushes, ostriches, food, role, alive_starved_killed = self._get_obs()
+        image = np.zeros(
+            (self.game_options["width"], self.game_options["height"], 3),
+            dtype="uint8",
+        )
+
+        image[:, :, 0] = 255 * wolves
+        image[:, :, 1] = 255 * bushes
+        image[:, :, 2] = 255 * ostriches
+        if alive_starved_killed == 2:
+            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
+            image[empty] = 127
+        if role == 0:
+            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
+            image[empty] = 255
+        image = np.fliplr(np.transpose(image, axes=(1, 0, 2)))
+        image = image.repeat(scale, axis=0).repeat(scale, axis=1)
+        if draw_health:
+            image_from_array = Image.fromarray(image)
+            imd = ImageDraw.Draw(image_from_array)
+            imd.text((0, 0), str(bush_proximity), fill="blue")
+            return np.array(image_from_array)
+        else:
+            return image
 
 
 class RandomAgent(object):
