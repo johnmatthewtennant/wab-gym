@@ -572,7 +572,8 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         self.max_distance = self.game_options["width"] // 2 + self.game_options["height"] // 2 + 1
         self.observation_space = spaces.Tuple(
             (
-                spaces.Box(low=0, high=self.max_distance, shape=(2,)),  # nearest bush
+                spaces.Box(low=0, high=self.max_distance, shape=(4,), dtype=int),  # nearest bush
+                spaces.Box(low=0, high=self.max_distance, shape=(4,), dtype=int), # second nearest bush
                 spaces.Box(low=0, high=10, shape=(4,)),  # num bushes (up to a max of 10)
                 self.env.observation_space[3],  # food
                 self.env.observation_space[4],  # role
@@ -583,7 +584,11 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
     def observation(self, obs):
 
         bushes_in_each_direction = self._get_num_things_each_direction(obs[1])
-        nearest_bush = self._get_nearest_thing(obs[1])
+        nearest_bush, second_nearest_bush = self._get_nearest_things(obs[1])
+
+        # In order to get the same stats for wolves, uncomment the lines below:
+        #wolves_in_each_direction = self._get_num_things_each_direction(obs[0])
+        #nearest_wolf, second_nearest_wolf = self._get_nearest_things(obs[0])
 
         # assuming food has int output (turns until starving
         food = obs[3]
@@ -591,32 +596,44 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         role = obs[4]
         alive_starved_killed = obs[5]
 
-        return nearest_bush, bushes_in_each_direction, food, role, alive_starved_killed
+        return nearest_bush, second_nearest_bush, bushes_in_each_direction, food, role, alive_starved_killed
 
-    def _get_nearest_thing(self, binary_map: np.ndarray):
+    def _get_nearest_things(self, binary_map: np.ndarray):
         # abstracted so this method can be used with wolf maps, bush maps,
         #   and possibly ostrich maps in the future
 
         # indexes is a tuple of two np.ndarrays, the first denoting the rows
         #   and the second denoting the columns of each wolf (.
         indexes = np.where(binary_map == 1)
+        if len(indexes[0]) == 0:
+            return [0,0,0,0], [0,0,0,0]
         shortest_taxicab = self.max_distance
+        shortest_taxicab_indexes = [0, 0]
+        second_shortest_taxicab = self.max_distance
         shortest_taxicab_indexes = [0, 0]
         for j in range(len(indexes[0])):
             relative_row = indexes[0][j] - self.game_options["height"] // 2
             relative_column = indexes[0][j] - self.game_options["width"] // 2
             taxicab = abs(relative_row) + abs(relative_column)
             if taxicab < shortest_taxicab:
+                second_shortest_taxicab = shortest_taxicab
+                second_shortest_taxicab_indexes = shortest_taxicab_indexes
                 shortest_taxicab = taxicab
                 shortest_taxicab_indexes[0] = relative_row
                 shortest_taxicab_indexes[1] = relative_column
+
 
         up = max(shortest_taxicab_indexes[0], 0)
         down = abs(min(shortest_taxicab_indexes[0], 0))
         right = max(shortest_taxicab_indexes[1], 0)
         left = abs(min(shortest_taxicab_indexes[1], 0))
 
-        return [up, down, right, left]
+        up2 = max(second_shortest_taxicab_indexes[0], 0)
+        down2 = abs(min(second_shortest_taxicab_indexes[0], 0))
+        right2 = max(shortest_taxicab_indexes[1], 0)
+        left2 = abs(min(shortest_taxicab_indexes[1], 0))
+
+        return [up, down, right, left], [up2, down2, right2, left2]
 
     def _get_num_things_each_direction(self, binary_map):
         # also abstracted for the same reason as _get_nearest_thing
