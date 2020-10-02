@@ -535,14 +535,14 @@ class WolvesAndBushesEnv(gym.Env):
 class PragmaticObsWrapper(gym.ObservationWrapper):
     """A wrapper class that outputs the following obs:
     nearest_wolf:
-        A list of four quantities ([up, down, right, left]), denoting the
+        A list of four quantities ([up, right, down, left]), denoting the
         distance in each direction from the closest wolf. if the player
         exists at [5][5], and the nearest wolf is located at [7, 9]
         (both given from the top-left corner), then
         nearest_wolf would be: [0, 4, 0, 2]
     num_wolves:
         A list of four quantities, each describing the number of wolves in
-        all four directions ([up, down, right, left]) relative to the player.
+        all four directions ([up, right, down, left]) relative to the player.
         For example, for a grid like:
         [[0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -586,7 +586,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
 
         bushes_in_each_direction = self._get_num_things_each_direction(obs[1])
         nearest_bush, second_nearest_bush = self._get_nearest_things(obs[1])
-
+        print(bushes_in_each_direction)
         # In order to get the same stats for wolves, uncomment the lines below:
         # wolves_in_each_direction = self._get_num_things_each_direction(obs[0])
         # nearest_wolf, second_nearest_wolf = self._get_nearest_things(obs[0])
@@ -621,38 +621,38 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         shortest_taxicab_indexes = [0, 0]
         for j in range(len(indexes[0])):
             relative_row = indexes[0][j] - self.game_options["height"] // 2
-            relative_column = indexes[0][j] - self.game_options["width"] // 2
+            relative_column = indexes[1][j] - self.game_options["width"] // 2
             taxicab = abs(relative_row) + abs(relative_column)
             if taxicab < shortest_taxicab:
                 second_shortest_taxicab = shortest_taxicab
-                second_shortest_taxicab_indexes = shortest_taxicab_indexes
+                second_shortest_taxicab_indexes = shortest_taxicab_indexes[:]
                 shortest_taxicab = taxicab
                 shortest_taxicab_indexes[0] = relative_row
                 shortest_taxicab_indexes[1] = relative_column
 
         up = max(shortest_taxicab_indexes[0], 0)
-        down = abs(min(shortest_taxicab_indexes[0], 0))
         right = max(shortest_taxicab_indexes[1], 0)
+        down = abs(min(shortest_taxicab_indexes[0], 0))
         left = abs(min(shortest_taxicab_indexes[1], 0))
 
         up2 = max(second_shortest_taxicab_indexes[0], 0)
+        right2 = max(second_shortest_taxicab_indexes[1], 0)
         down2 = abs(min(second_shortest_taxicab_indexes[0], 0))
-        right2 = max(shortest_taxicab_indexes[1], 0)
-        left2 = abs(min(shortest_taxicab_indexes[1], 0))
+        left2 = abs(min(second_shortest_taxicab_indexes[1], 0))
 
-        return [up, down, right, left], [up2, down2, right2, left2]
+        return [up, right, down, left], [up2, right2, down2, left2]
 
     def _get_num_things_each_direction(self, binary_map):
         # also abstracted for the same reason as _get_nearest_thing
         half_row_index = self.game_options["height"] // 2
         half_column_index = self.game_options["width"] // 2
 
-        up = np.count_nonzero(binary_map[0:half_row_index] == 1)
-        down = np.count_nonzero(binary_map[half_row_index + 1 :])
-        right = np.count_nonzero(binary_map[0:][0:half_column_index])
-        left = np.count_nonzero(binary_map[0:][half_column_index + 1 :])
+        up = np.count_nonzero(binary_map[0:half_row_index, :] == 1)
+        right = np.count_nonzero(binary_map[:, 0:half_column_index])
+        down = np.count_nonzero(binary_map[half_row_index + 1 :, :])
+        left = np.count_nonzero(binary_map[:, half_column_index + 1 :])
 
-        return [up, down, right, left]
+        return [up, right, down, left]
 
 
 class NNFriendlyObsWrapper(gym.ObservationWrapper):
