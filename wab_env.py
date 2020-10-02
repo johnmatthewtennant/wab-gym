@@ -609,6 +609,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
                 spaces.Tuple([spaces.Discrete(self.max_distance)] * 4),  # nearest bush
                 spaces.Tuple([spaces.Discrete(self.max_distance)] * 4),  # second nearest bush
                 spaces.Tuple([spaces.Discrete(11)] * 4),  # num bushes (up to a max of 10)
+                spaces.Discrete(2),  # standing on bush
                 self.env.observation_space[3],  # food
                 self.env.observation_space[4],  # role
                 self.env.observation_space[5],  # alive_killed_starved
@@ -625,6 +626,8 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         # nearest_wolf, second_nearest_wolf = self._get_nearest_things(obs[0])
 
         # assuming food has int output (turns until starving
+        standing_on_bush = int(obs[2][self.max_distance // 2, self.max_distance // 2])
+
         food = obs[3]
 
         role = obs[4]
@@ -634,6 +637,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
             nearest_bush,
             second_nearest_bush,
             bushes_in_each_direction,
+            standing_on_bush,
             food,
             role,
             alive_starved_killed,
@@ -664,16 +668,24 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
                 shortest_taxicab_indexes[1] = relative_column
 
         up = max(shortest_taxicab_indexes[0], 0)
+        up = bool(up) * (self.max_distance - up)
         right = max(shortest_taxicab_indexes[1], 0)
+        right = bool(right) * (self.max_distance - right)
         down = abs(min(shortest_taxicab_indexes[0], 0))
+        down = bool(down) * (self.max_distance - down)
         left = abs(min(shortest_taxicab_indexes[1], 0))
+        left = bool(left) * (self.max_distance - left)
 
         up2 = max(second_shortest_taxicab_indexes[0], 0)
+        up2 = bool(up2) * (self.max_distance - up2)
         right2 = max(second_shortest_taxicab_indexes[1], 0)
+        right2 = bool(right2) * (self.max_distance - right2)
         down2 = abs(min(second_shortest_taxicab_indexes[0], 0))
+        down2 = bool(down2) * (self.max_distance - down2)
         left2 = abs(min(second_shortest_taxicab_indexes[1], 0))
+        left2 = bool(left2) * (self.max_distance - left2)
 
-        return [up, right, down, left], [up2, right2, down2, left2]
+        return ([up, right, down, left], [up2, right2, down2, left2])
 
     def _get_num_things_each_direction(self, binary_map):
         # also abstracted for the same reason as _get_nearest_thing
