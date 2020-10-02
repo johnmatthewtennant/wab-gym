@@ -25,7 +25,7 @@ default_game_options = {
     "turns_to_fill_food": 8,  # How many turns of gathering does it take to fill food?
     "turns_to_empty_food": 40,  # How many turns of not gathering does it take to starve?
     "starting_food": 1,  # 0 to 1 float. None values will be assigned randomly
-    "starting_role": None,  # None values will be assigned randomly
+    "starting_role": 1,  # None values will be assigned randomly
     # WOLVES
     "chance_wolf_on_square": 0,  # 0.001,
     "wolf_spawn_margin": 1,
@@ -40,8 +40,8 @@ action_definitions = pd.DataFrame(
         {"x": 1, "y": 0, "role": None},  # right
         {"x": 0, "y": -1, "role": None},  # down
         {"x": -1, "y": 0, "role": None},  # left
-        {"x": 0, "y": 0, "role": 0},  # don't move. Be lookout
         {"x": 0, "y": 0, "role": 1},  # don't move. Be gatherer
+        {"x": 0, "y": 0, "role": 0},  # don't move. Be lookout
     ],
     dtype=int,
 )
@@ -123,9 +123,12 @@ class WolvesAndBushesEnv(gym.Env):
         if self.game_options["width"] % 2 == 0 or self.game_options["height"] % 2 == 0:
             raise ValueError("width and height must be odd numbers")
         # TODO action space will need to be tuple for multiple agents
-        self.action_space = spaces.Discrete(6)  # up, right, down, left, stay, switch roles
+        self.initialize_action_space()
         self.initialize_observation_space()
         self.reset()
+
+    def initialize_action_space(self):
+        self.action_space = spaces.Discrete(6)  # up, right, down, left, stay, switch roles
 
     def initialize_observation_space(self):
         self.observation_space = spaces.Tuple(
@@ -544,7 +547,7 @@ class WolvesAndBushesEnv(gym.Env):
             )["taxicab_distance"]
         else:
             wolf_distance = pd.Series([0] * 5)
-        return self.max_distance - wolf_distance
+        return np.clip(self.max_distance - wolf_distance, 0, self.max_distance)
 
     def _get_bush_proximities(self):
         if not self.bushes[self.bushes.food > 0].empty:
@@ -560,7 +563,8 @@ class WolvesAndBushesEnv(gym.Env):
             )["taxicab_distance"]
         else:
             bush_distance = pd.Series([0] * 5)
-        return self.max_distance - bush_distance
+
+        return np.clip(self.max_distance - bush_distance, 0, self.max_distance)
 
 
 class PragmaticObsWrapper(gym.ObservationWrapper):
@@ -787,16 +791,16 @@ class SuperBasicObservationWrapper(PragmaticObsWrapper):
         )
 
 
-class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
+class WolvesAndBushesEnvEgoCentric(WolvesAndBushesEnv):
     def initialize_observation_space(self):
         self.max_distance = (
             self.game_options["width"] // 2 + self.game_options["height"] // 2 + 1
         )  # this is the maximum taxicab distance any object on screen can be from any of the squares the ostrich can reach on the next turn
         self.observation_space = spaces.Tuple(
             (
-                spaces.Tuple(
-                    [spaces.Discrete(self.max_distance + 1)] * 5
-                ),  # proximity to nearest wolves
+                # spaces.Tuple(
+                #     [spaces.Discrete(self.max_distance + 1)] * 5
+                # ),  # proximity to nearest wolves
                 spaces.Tuple(
                     [spaces.Discrete(self.max_distance + 1)] * 5
                 ),  # proximities to nearest bushes
@@ -812,46 +816,31 @@ class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
         food = self._get_turns_until_starve()
         role = self._get_role_obs()
         alive_starved_killed = self._get_alive_starved_killed_obs()
-        obs = (wolves, bushes, food, role, alive_starved_killed)
-        return obs
+
+        return (bushes, food, role, alive_starved_killed)  # wolves,
 
     def _get_raw_obs(self):
         return super()._get_obs(self)
 
-    def render(self, mode="rgb_array", scale=32, draw_health=True):
-        # This is for rendering video. Bushes are green, wolves red, ostriches blue
-        wolf_proximity, bush_proximity, food, role, alive_starved_killed = self._get_obs()
-        wolves = self._get_wolf_grid()
-        bushes = self._get_bush_grid()
-        ostriches = self._get_ostrich_grid()
-        food = self._get_turns_until_starve()
-        role = self.ostriches.iloc[0].role
-        alive_starved_killed = self.ostriches.iloc[0].alive_starved_killed
 
-        # wolves, bushes, ostriches, food, role, alive_starved_killed = self._get_obs()
-        image = np.zeros(
-            (self.game_options["width"], self.game_options["height"], 3),
-            dtype="uint8",
-        )
+class WolvesAndBushesEnvEgocentricJustBushes(WolvesAndBushesEnvEgoCentric):
+    def initialize_observation_space(self):
+        self.max_distance = (
+            self.game_options["width"] // 2 + self.game_options["height"] // 2 + 1
+        )  # this is the maximum taxicab distance any object on screen can be from any of the squares the ostrich can reach on the next turn
+        self.observation_space = spaces.Tuple([spaces.Discrete(self.max_distance + 1)] * 5)
+        # proximities to nearest bushes
 
-        image[:, :, 0] = 255 * wolves
-        image[:, :, 1] = 255 * bushes
-        image[:, :, 2] = 255 * ostriches
-        if alive_starved_killed == 2:
-            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
-            image[empty] = 127
-        if role == 0:
-            empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
-            image[empty] = 255
-        image = np.fliplr(np.transpose(image, axes=(1, 0, 2)))
-        image = image.repeat(scale, axis=0).repeat(scale, axis=1)
-        if draw_health:
-            image_from_array = Image.fromarray(image)
-            imd = ImageDraw.Draw(image_from_array)
-            imd.text((0, 0), str(bush_proximity), fill="blue")
-            return np.array(image_from_array)
-        else:
-            return image
+    def initialize_action_space(self):
+        self.action_space = spaces.Discrete(5)
+
+    def _get_obs(self):
+        # wolves = self._get_wolf_proximities()
+        bushes = self._get_bush_proximities()
+        # food = self._get_turns_until_starve()
+        # role = self._get_role_obs()
+        # alive_starved_killed = self._get_alive_starved_killed_obs()
+        return bushes  # wolves,
 
 
 class RandomAgent(object):
@@ -876,7 +865,7 @@ if __name__ == "__main__":
     logger.set_level(logger.INFO)
 
     # env = PragmaticObsWrapper(WolvesAndBushesEnv())
-    env = WolvesAndBushesEnvEgocentric()
+    env = WolvesAndBushesEnvEgocentricJustBushes()
     # env = NNFriendlyObsWrapper(WolvesAndBushesEnvEgocentric())
 
     # You provide the directory to write to (can be an existing

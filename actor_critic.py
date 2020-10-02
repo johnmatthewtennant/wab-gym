@@ -7,6 +7,7 @@ Created on Sun Sep 20 19:30:09 2020
 
 import argparse
 import gym
+from gym import wrappers
 import numpy as np
 from itertools import count
 from collections import namedtuple
@@ -17,7 +18,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
-import wab_env
+from wab_env import WolvesAndBushesEnvEgocentricJustBushes
 
 # parser = argparse.ArgumentParser(description="PyTorch actor-critic example")
 # parser.add_argument(
@@ -39,7 +40,10 @@ log_interval = 10
 
 
 # env = wab_env.PragmaticObsWrapper(wab_env.WolvesAndBushesEnv())
-env = wab_env.WolvesAndBushesEnvEgocentric()
+
+# env = wab_env.WolvesAndBushesEnvEgocentric()
+outdir = "/tmp/random-agent-results"
+env = gym.wrappers.Monitor(WolvesAndBushesEnvEgocentricJustBushes(), directory=outdir, force=True)
 # env.seed(args.seed)
 # torch.manual_seed(args.seed)
 
