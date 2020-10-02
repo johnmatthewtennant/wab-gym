@@ -606,8 +606,8 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         self.max_distance = self.game_options["width"] // 2 + self.game_options["height"] // 2 + 1
         self.observation_space = spaces.Tuple(
             (
-                spaces.Tuple([spaces.Discrete(self.max_distance)] * 4),  # nearest bush
-                spaces.Tuple([spaces.Discrete(self.max_distance)] * 4),  # second nearest bush
+                spaces.Tuple([spaces.Discrete(self.max_distance) + 1] * 4),  # nearest bush
+                spaces.Tuple([spaces.Discrete(self.max_distance) + 1] * 4),  # second nearest bush
                 spaces.Tuple([spaces.Discrete(11)] * 4),  # num bushes (up to a max of 10)
                 spaces.Discrete(2),  # standing on bush
                 self.env.observation_space[3],  # food
