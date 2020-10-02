@@ -541,7 +541,6 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         exists at [5][5], and the nearest wolf is located at [7, 9]
         (both given from the top-left corner), then
         nearest_wolf would be: [0, 4, 0, 2]
-
     num_wolves:
         A list of four quantities, each describing the number of wolves in
         all four directions ([up, down, right, left]) relative to the player.
@@ -557,20 +556,14 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, w, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]]
-
         num_wolves would be: [4, 3, 3, 3] (wolves can count in more than one zone)
-
     nearest_bush:
         same as nearest_wolf but for bushes
-
     num_bushes:
         same as num_wolves but for bushes
-
     food:
         an integer representing the number of turns until starving
-
     role and alive_starved_killed are the same as always.
-
     """
 
     def __init__(self, env: gym.Env):
