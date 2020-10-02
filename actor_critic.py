@@ -38,7 +38,8 @@ gamma = 0.99
 log_interval = 10
 
 
-env = wab_env.PragmaticObsWrapper(wab_env.WolvesAndBushesEnv())
+# env = wab_env.PragmaticObsWrapper(wab_env.WolvesAndBushesEnv())
+env = wab_env.WolvesAndBushesEnvEgocentric()
 # env.seed(args.seed)
 # torch.manual_seed(args.seed)
 

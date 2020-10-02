@@ -763,18 +763,13 @@ class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
         )  # this is the maximum taxicab distance any object on screen can be from any of the squares the ostrich can reach on the next turn
         self.observation_space = spaces.Tuple(
             (
-                spaces.Box(
-                    0, self.max_distance, shape=(5,), dtype=int
-                ),  # values = (self.max_distance - distance_to_nearest_wolf[up,right,down,left,stay])
-                spaces.Box(
-                    0, self.max_distance, shape=(5,), dtype=int
-                ),  # values = (self.max_distance - distance_to_nearest_bush[up,right,down,left,stay])
-                spaces.Box(
-                    0,
-                    1,
-                    shape=(int(np.ceil(np.log2(self.game_options["turns_to_empty_food"]))),),
-                    dtype=int,
-                ),  # current food
+                # spaces.Tuple(
+                #     [spaces.Discrete(self.max_distance)] * 5
+                # ), # proximity of nearest wolf
+                spaces.Tuple(
+                    [spaces.Discrete(self.max_distance + 1)] * 5
+                ),  # proximity of nearest bush
+                spaces.Discrete(self.game_options["turns_to_empty_food"] + 1),  # current food
                 spaces.Discrete(2),  # current role
                 spaces.Discrete(3),  # alive, starved, killed
             )
@@ -804,15 +799,12 @@ class WolvesAndBushesEnvEgocentric(WolvesAndBushesEnv):
             )["taxicab_distance"]
         else:
             potential_actions["bush_distance"] = self.max_distance
-        # TODO use integer values and write an observation wrapper for the env that generates neural net-friendly output (-1 to 1)
-        wolves = self.max_distance - potential_actions.wolf_distance
-        # TODO use integer values and write an observation wrapper for the env that generates neural net-friendly output (-1 to 1)
+        # wolves = self.max_distance - potential_actions.wolf_distance
         bushes = self.max_distance - potential_actions.bush_distance
-        food = self._get_one_hot_food()
+        food = self._get_turns_until_starve()
         role = self._get_role_obs()
         alive_starved_killed = self._get_alive_starved_killed_obs()
-        obs = (wolves, bushes, food, role, alive_starved_killed)
-        # print(obs)
+        obs = (bushes, food, role, alive_starved_killed)
         return obs
 
 
@@ -837,8 +829,8 @@ if __name__ == "__main__":
     # want to change the amount of output.
     logger.set_level(logger.INFO)
 
-    env = PragmaticObsWrapper(WolvesAndBushesEnv())
-    # env = WolvesAndBushesEnvEgocentric()
+    # env = PragmaticObsWrapper(WolvesAndBushesEnv())
+    env = WolvesAndBushesEnvEgocentric()
     # env = NNFriendlyObsWrapper(WolvesAndBushesEnvEgocentric())
 
     # You provide the directory to write to (can be an existing
