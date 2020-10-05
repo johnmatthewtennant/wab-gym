@@ -20,20 +20,20 @@ default_game_options = {
     # GAME
     "max_turns": 80,
     "num_ostriches": 1,
-    "height": 11,
-    "width": 11,
-    "bush_power": 100,
+    "height": 11,  # Viewport height
+    "width": 11,  # Viewport width
+    "bush_power": 100,  # Power-law distribution: Higher values produce fewer bushes
     "max_berries_per_bush": 200,
     # FOOD
     "turns_to_fill_food": 8,  # How many turns of gathering does it take to fill food?
     "turns_to_empty_food": 40,  # How many turns of not gathering does it take to starve?
     "starting_food": 1,  # 0 to 1 float. None values will be assigned randomly
     # WOLVES
-    "wolf_spawn_margin": 1,  # How many squares out from the player's view should wolves spawn?
-    "chance_wolf_on_square": 0.001,  # Chance for wolf to spawn on each square of the perimeter
-    "wolf_chance_to_despawn": 0.05,  # Chance for a wolf to despawn each turn
-    "wolves": True,  # True,
-    "wolves_can_move": True,  # True,
+    "wolf_spawn_margin": 1,  # How many squares out from the player's view should wolves spawn?, 1 seems reasonable
+    "chance_wolf_on_square": 0.001,  # Chance for wolf to spawn on each square of the perimeter, .001 seems reasonable
+    "wolf_chance_to_despawn": 0.05,  # Chance for a wolf to despawn each turn, .05 seems reasonable
+    "wolves": True,  # Spawn wolves?
+    "wolves_can_move": True,  # Can wolves move?
 }
 
 
