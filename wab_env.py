@@ -11,7 +11,8 @@ from PIL import Image, ImageDraw
 default_game_options = {
     # GYM OPTIONS
     "reward_per_turn": 0,
-    "reward_for_death": 0,
+    "reward_for_being_killed": 0,
+    "reward_for_starving": 0,
     "reward_for_finishing": 0,
     "reward_for_eating": 1,
     # GAME
@@ -25,26 +26,15 @@ default_game_options = {
     "turns_to_fill_food": 8,  # How many turns of gathering does it take to fill food?
     "turns_to_empty_food": 40,  # How many turns of not gathering does it take to starve?
     "starting_food": 1,  # 0 to 1 float. None values will be assigned randomly
+    "gatherer_only": True,
     "starting_role": 1,  # None values will be assigned randomly
     # WOLVES
-    "chance_wolf_on_square": 0,  # 0.001,
+    "chance_wolf_on_square": 0.001,  # 0.001,
     "wolf_spawn_margin": 1,
     "wolf_chance_to_despawn": 0.05,
-    "wolves": False,  # True,
-    "wolves_can_move": False,  # True,
+    "wolves": True,  # True,
+    "wolves_can_move": True,  # True,
 }
-
-action_definitions = pd.DataFrame(
-    [
-        {"x": 0, "y": 1, "role": None},  # up
-        {"x": 1, "y": 0, "role": None},  # right
-        {"x": 0, "y": -1, "role": None},  # down
-        {"x": -1, "y": 0, "role": None},  # left
-        {"x": 0, "y": 0, "role": 1},  # don't move. Be gatherer
-        {"x": 0, "y": 0, "role": 0},  # don't move. Be lookout
-    ],
-    dtype=int,
-)
 
 
 def get_distances_to_everything(ostriches, master_df):
@@ -122,13 +112,38 @@ class WolvesAndBushesEnv(gym.Env):
         )
         if self.game_options["width"] % 2 == 0 or self.game_options["height"] % 2 == 0:
             raise ValueError("width and height must be odd numbers")
+        if self.game_options["gatherer_only"]:
+            self.action_definitions = pd.DataFrame(
+                [
+                    {"x": 0, "y": 1, "role": None},  # up
+                    {"x": 1, "y": 0, "role": None},  # right
+                    {"x": 0, "y": -1, "role": None},  # down
+                    {"x": -1, "y": 0, "role": None},  # left
+                    {"x": 0, "y": 0, "role": 1},  # don't move. Be gatherer
+                ],
+                dtype=int,
+            )
+        else:
+            self.action_definitions = pd.DataFrame(
+                [
+                    {"x": 0, "y": 1, "role": None},  # up
+                    {"x": 1, "y": 0, "role": None},  # right
+                    {"x": 0, "y": -1, "role": None},  # down
+                    {"x": -1, "y": 0, "role": None},  # left
+                    {"x": 0, "y": 0, "role": 1},  # don't move. Be gatherer
+                    {"x": 0, "y": 0, "role": 0},  # don't move. Be lookout
+                ],
+                dtype=int,
+            )
         # TODO action space will need to be tuple for multiple agents
         self.initialize_action_space()
         self.initialize_observation_space()
         self.reset()
 
     def initialize_action_space(self):
-        self.action_space = spaces.Discrete(6)  # up, right, down, left, stay, switch roles
+        self.action_space = spaces.Discrete(
+            len(self.action_definitions)
+        )  # up, right, down, left, stay & gather, stay & lookout
 
     def initialize_observation_space(self):
         self.observation_space = spaces.Tuple(
@@ -190,7 +205,7 @@ class WolvesAndBushesEnv(gym.Env):
     def step(self, actions):
         reward = 0
         self.current_turn += 1
-        action_details = action_definitions.iloc[actions]
+        action_details = self.action_definitions.iloc[actions]
         # TODO applying the action will have to be totally rewritten for multiplayer
         self.ostriches.x = self.ostriches.x + action_details["x"]
         self.ostriches.y = self.ostriches.y + action_details["y"]
@@ -272,9 +287,13 @@ class WolvesAndBushesEnv(gym.Env):
             else:
                 reward += self.game_options["reward_per_turn"]
                 done = False
-        else:
-            reward += self.game_options["reward_for_death"]
+        elif self.ostriches.iloc[0].alive_starved_killed == 1:
+            reward += self.game_options["reward_for_starving"]
             done = True
+        else:  # self.ostriches.iloc[0].alive_starved_killed == 2:
+            reward += self.game_options["reward_for_being_killed"]
+            done = True
+
         return self._get_obs(), reward, done, {}
 
     def _get_obs(self):
@@ -322,9 +341,13 @@ class WolvesAndBushesEnv(gym.Env):
             & (abs(self.distances.delta_x) < self.game_options["width"] / 2)
             & (abs(self.distances.delta_y) < self.game_options["height"] / 2)
         ]
-        visible_wolves = visible_objects[
-            (visible_objects.object_type == "wolf") & (visible_objects.ostrich_role == 0)  # lookout
-        ]
+        if self.game_options["gatherer_only"]:
+            visible_wolves = visible_objects[(visible_objects.object_type == "wolf")]  # lookout
+        else:
+            visible_wolves = visible_objects[
+                (visible_objects.object_type == "wolf")
+                & (visible_objects.ostrich_role == 0)  # lookout
+            ]
         wolf_grid[
             np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_wolves.delta_y + self.game_options["height"] // 2, int),
@@ -606,8 +629,11 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         self.max_distance = self.game_options["width"] // 2 + self.game_options["height"] // 2 + 1
         self.observation_space = spaces.Tuple(
             (
-                spaces.Tuple([spaces.Discrete(self.max_distance) + 1] * 4),  # nearest bush
-                spaces.Tuple([spaces.Discrete(self.max_distance) + 1] * 4),  # second nearest bush
+                spaces.Tuple([spaces.Discrete(self.max_distance + 1)] * 4),  # nearest wolf
+                spaces.Tuple([spaces.Discrete(self.max_distance + 1)] * 4),  # second nearest wolf
+                spaces.Tuple([spaces.Discrete(11)] * 4),  # num wolves (up to a max of 10)
+                spaces.Tuple([spaces.Discrete(self.max_distance + 1)] * 4),  # nearest bush
+                spaces.Tuple([spaces.Discrete(self.max_distance + 1)] * 4),  # second nearest bush
                 spaces.Tuple([spaces.Discrete(11)] * 4),  # num bushes (up to a max of 10)
                 spaces.Discrete(2),  # standing on bush
                 self.env.observation_space[3],  # food
@@ -617,23 +643,23 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         )
 
     def observation(self, obs):
+        nearest_wolf, second_nearest_wolf = self._get_nearest_things(obs[0])
+        wolves_in_each_direction = np.minimum(self._get_num_things_each_direction(obs[0]), 10)
 
-        bushes_in_each_direction = np.minimum(self._get_num_things_each_direction(obs[1]), 10)
         nearest_bush, second_nearest_bush = self._get_nearest_things(obs[1])
-        # print(bushes_in_each_direction)
-        # In order to get the same stats for wolves, uncomment the lines below:
-        # wolves_in_each_direction = self._get_num_things_each_direction(obs[0])
-        # nearest_wolf, second_nearest_wolf = self._get_nearest_things(obs[0])
+        bushes_in_each_direction = np.minimum(self._get_num_things_each_direction(obs[1]), 10)
 
-        # assuming food has int output (turns until starving
         standing_on_bush = int(obs[2][self.max_distance // 2, self.max_distance // 2])
 
+        # assuming food has int output (turns until starving)
         food = obs[3]
-
         role = obs[4]
         alive_starved_killed = obs[5]
 
         return (
+            nearest_wolf,
+            second_nearest_wolf,
+            wolves_in_each_direction,
             nearest_bush,
             second_nearest_bush,
             bushes_in_each_direction,
@@ -876,8 +902,8 @@ if __name__ == "__main__":
     # want to change the amount of output.
     logger.set_level(logger.INFO)
 
-    # env = PragmaticObsWrapper(WolvesAndBushesEnv())
-    env = WolvesAndBushesEnvEgocentricJustBushes()
+    env = PragmaticObsWrapper(WolvesAndBushesEnv())
+    # env = WolvesAndBushesEnvEgocentricJustBushes()
     # env = NNFriendlyObsWrapper(WolvesAndBushesEnvEgocentric())
 
     # You provide the directory to write to (can be an existing
