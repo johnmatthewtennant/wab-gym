@@ -15,6 +15,8 @@ default_game_options = {
     "reward_for_starving": 0,
     "reward_for_finishing": 0,
     "reward_for_eating": 1,
+    "gatherer_only": True,  # Allows gatherers to see wolves. Disables lookout mode
+    "starting_role": 1,  # None values will be assigned randomly
     # GAME
     "max_turns": 80,
     "num_ostriches": 1,
@@ -26,12 +28,10 @@ default_game_options = {
     "turns_to_fill_food": 8,  # How many turns of gathering does it take to fill food?
     "turns_to_empty_food": 40,  # How many turns of not gathering does it take to starve?
     "starting_food": 1,  # 0 to 1 float. None values will be assigned randomly
-    "gatherer_only": True,  # Allows gatherers to see wolves. Disables lookout mode
-    "starting_role": 1,  # None values will be assigned randomly
     # WOLVES
-    "chance_wolf_on_square": 0.001,  # 0.001,
-    "wolf_spawn_margin": 1,
-    "wolf_chance_to_despawn": 0.05,
+    "wolf_spawn_margin": 1,  # How many squares out from the player's view should wolves spawn?
+    "chance_wolf_on_square": 0.001,  # Chance for wolf to spawn on each square of the perimeter
+    "wolf_chance_to_despawn": 0.05,  # Chance for a wolf to despawn each turn
     "wolves": True,  # True,
     "wolves_can_move": True,  # True,
 }
