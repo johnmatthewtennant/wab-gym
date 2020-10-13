@@ -322,6 +322,10 @@ class WolvesAndBushesEnv(gym.Env):
 
     def _get_obs(self):
 
+        #change this to apply view_masks to the wolves and bushes
+        #   visible to the agent.
+        blinding_here = True
+
         role = self._get_role_obs()
         if role == 1:
             #gatherer
@@ -332,11 +336,11 @@ class WolvesAndBushesEnv(gym.Env):
         wolves = self._get_wolf_grid()
         bushes = self._get_bush_grid()
         ostriches = self._get_ostrich_grid()
-
-        blindspots = np.where(view_mask == 1)
-        wolves[blindspots] = 0
-        bushes[blindspots] = 0
-        ostriches[blindspots] = 0
+        if blinding_here:
+            blindspots = np.where(view_mask == 1)
+            wolves[blindspots] = 0
+            bushes[blindspots] = 0
+            ostriches[blindspots] = 0
 
         return(
             wolves,
@@ -384,13 +388,11 @@ class WolvesAndBushesEnv(gym.Env):
             & (abs(self.distances.delta_x) < self.game_options["width"] / 2)
             & (abs(self.distances.delta_y) < self.game_options["height"] / 2)
         ]
-        if self.game_options["gatherer_only"]:
-            visible_wolves = visible_objects[(visible_objects.object_type == "wolf")]  # lookout
-        else:
-            visible_wolves = visible_objects[
-                (visible_objects.object_type == "wolf")
-                & (visible_objects.ostrich_role == 0)  # lookout
-            ]
+
+        visible_wolves = visible_objects[
+            visible_objects.object_type == "wolf"
+        ]  # lookout
+
         wolf_grid[
             np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_wolves.delta_y + self.game_options["height"] // 2, int),
