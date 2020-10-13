@@ -329,10 +329,19 @@ class WolvesAndBushesEnv(gym.Env):
         else:
             view_mask = self.lookout_tile_mask
 
+        wolves = self._get_wolf_grid()
+        bushes = self._get_bush_grid()
+        ostriches = self._get_ostrich_grid()
+
+        blindspots = np.where(view_mask == 1)
+        wolves[blindspots] = 0
+        bushes[blindspots] = 0
+        ostriches[blindspots] = 0
+
         return(
-            self._get_wolf_grid(),
-            self._get_bush_grid(),
-            self._get_ostrich_grid(),
+            wolves,
+            bushes,
+            ostriches,
             # here are the three ways of representing food, Not sure which is best
             # self._get_one_hot_food(),
             # self._get_food_quantity(),
@@ -685,17 +694,19 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
 
         wolves = obs[0]
         bushes = obs[1]
-        wolves[np.where(view_mask == 1)] = 0
+
 
 
         nearest_wolf, second_nearest_wolf = self._get_nearest_things(wolves)
         wolves_in_each_direction = np.minimum(self._get_num_things_each_direction(wolves), 10)
 
-        bushes[np.where(view_mask == 1)] = 0
         nearest_bush, second_nearest_bush = self._get_nearest_things(bushes)
         bushes_in_each_direction = np.minimum(self._get_num_things_each_direction(bushes), 10)
 
-        standing_on_bush = int(obs[2][self.max_distance // 2, self.max_distance // 2])
+        # note: this was obs[2][self.max_distance//2, self.max_distance//2] but
+        #   obs[2] currently corresponds to the ostrich grid. I changed it to
+        #   bushes to work properly.
+        standing_on_bush = int(bushes[self.max_distance // 2, self.max_distance // 2])
 
         # assuming food has int output (turns until starving)
         food = obs[3]
