@@ -103,6 +103,30 @@ class WolvesAndBushesEnv(gym.Env):
 
     def __init__(self, game_options=default_game_options, render=False):
         self.game_options = game_options
+
+        self.lookout_tile_mask = np.array([[1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                                                    [1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+                                                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                                                    [1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1]])
+
+        self.gatherer_tile_mask = np.asarray([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                    [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
+                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                                                    [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
+                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
         self.spec = DummySpec(
             id="WolvesAndBushes-v0",
             max_episode_steps=game_options["max_turns"],
@@ -297,7 +321,15 @@ class WolvesAndBushesEnv(gym.Env):
         return self._get_obs(), reward, done, {}
 
     def _get_obs(self):
-        return (
+
+        role = self._get_role_obs()
+        if role == 1:
+            #gatherer
+            view_mask = self.gatherer_tile_mask
+        else:
+            view_mask = self.lookout_tile_mask
+
+        return(
             self._get_wolf_grid(),
             self._get_bush_grid(),
             self._get_ostrich_grid(),
@@ -305,9 +337,11 @@ class WolvesAndBushesEnv(gym.Env):
             # self._get_one_hot_food(),
             # self._get_food_quantity(),
             self._get_turns_until_starve(),
-            self._get_role_obs(),
+            role,
             self._get_alive_starved_killed_obs(),
+            view_mask,
         )
+
 
     def _get_alive_starved_killed_obs(self):
         return self.ostriches.iloc[0].alive_starved_killed
@@ -621,6 +655,9 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
     food:
         an integer representing the number of turns until starving
     role and alive_starved_killed are the same as always.
+    view_mask is an 11x11 grid of tiles. The 0s are visible tiles, and the 1s
+    are out of the field of view of the agent. use for calculations accordingly
+    here.
     """
 
     def __init__(self, env: gym.Env):
@@ -639,15 +676,24 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
                 self.env.observation_space[3],  # food
                 self.env.observation_space[4],  # role
                 self.env.observation_space[5],  # alive_killed_starved
+                spaces.Box(0, 1, shape=(121,), dtype=int) # view mask
             )
         )
 
     def observation(self, obs):
-        nearest_wolf, second_nearest_wolf = self._get_nearest_things(obs[0])
-        wolves_in_each_direction = np.minimum(self._get_num_things_each_direction(obs[0]), 10)
+        view_mask = obs[6]
 
-        nearest_bush, second_nearest_bush = self._get_nearest_things(obs[1])
-        bushes_in_each_direction = np.minimum(self._get_num_things_each_direction(obs[1]), 10)
+        wolves = obs[0]
+        bushes = obs[1]
+        wolves[np.where(view_mask == 1)] = 0
+
+
+        nearest_wolf, second_nearest_wolf = self._get_nearest_things(wolves)
+        wolves_in_each_direction = np.minimum(self._get_num_things_each_direction(wolves), 10)
+
+        bushes[np.where(view_mask == 1)] = 0
+        nearest_bush, second_nearest_bush = self._get_nearest_things(bushes)
+        bushes_in_each_direction = np.minimum(self._get_num_things_each_direction(bushes), 10)
 
         standing_on_bush = int(obs[2][self.max_distance // 2, self.max_distance // 2])
 
@@ -667,6 +713,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
             food,
             role,
             alive_starved_killed,
+            view_mask,
         )
 
     def _get_nearest_things(self, binary_map: np.ndarray):
@@ -678,8 +725,9 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         indexes = np.where(binary_map == 1)
         if len(indexes[0]) == 0:
             return [0, 0, 0, 0], [0, 0, 0, 0]
+
         shortest_taxicab = self.max_distance
-        shortest_taxicab_indexes = [0, 0]
+
         second_shortest_taxicab = self.max_distance
         shortest_taxicab_indexes = [0, 0]
         for j in range(len(indexes[0])):
@@ -718,10 +766,12 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         half_row_index = self.game_options["height"] // 2
         half_column_index = self.game_options["width"] // 2
 
+        #asserting that these values are 0 on the view_mask as well in order
+        #   to include them.
         up = np.count_nonzero(binary_map[0:half_row_index, :] == 1)
-        right = np.count_nonzero(binary_map[:, 0:half_column_index])
-        down = np.count_nonzero(binary_map[half_row_index + 1 :, :])
-        left = np.count_nonzero(binary_map[:, half_column_index + 1 :])
+        right = np.count_nonzero(binary_map[:, half_column_index + 1 :] == 1)
+        down = np.count_nonzero(binary_map[half_row_index + 1 :, :] == 1)
+        left = np.count_nonzero(binary_map[:, 0:half_column_index] == 1)
 
         return [up, right, down, left]
 
@@ -892,6 +942,7 @@ class RandomAgent(object):
 
 
 if __name__ == "__main__":
+
     # NOTE FROM JOHN: This code is just for testing the env with a random agent.
     # To use the env, just import it from wab-env import WolvesAndBushesEnv
     # then env = WolvesAndBushesEnv() or env = WolvesAndBushesEnv(game_options)
@@ -911,7 +962,7 @@ if __name__ == "__main__":
     # will be namespaced). You can also dump to a tempdir if you'd
     # like: tempfile.mkdtemp().
     outdir = "/tmp/random-agent-results"
-    env = wrappers.Monitor(env, directory=outdir, force=True)
+    #env = wrappers.Monitor(env, directory=outdir, force=True)
     env.seed(0)
     agent = RandomAgent(env.action_space)
 
@@ -921,6 +972,7 @@ if __name__ == "__main__":
 
     for i in range(episode_count):
         ob = env.reset()
+
         while True:
             action = agent.act(ob, reward, done)
             ob, reward, done, _ = env.step(action)
