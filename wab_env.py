@@ -15,7 +15,7 @@ default_game_options = {
     "reward_for_starving": 0,
     "reward_for_finishing": 0,
     "reward_for_eating": 1,
-    "gatherer_only": True,  # Allows gatherers to see wolves. Disables lookout mode
+    "gatherer_only": False,  # Allows gatherers to see wolves. Disables lookout mode
     "starting_role": 1,  # None values will be assigned randomly
     # GAME
     "max_turns": 80,
@@ -104,29 +104,37 @@ class WolvesAndBushesEnv(gym.Env):
     def __init__(self, game_options=default_game_options, render=False):
         self.game_options = game_options
 
-        self.lookout_tile_mask = np.array([[1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
-                                                    [1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1],
-                                                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                                                    [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-                                                    [1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1],
-                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1]])
+        self.lookout_tile_mask = np.array(
+            [
+                [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                [1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
+                [1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1],
+                [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+            ]
+        )
 
-        self.gatherer_tile_mask = np.asarray([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                                                    [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
-                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
-                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
-                                                    [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
-                                                    [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
-                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                                                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        self.gatherer_tile_mask = np.asarray(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
+                [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                [1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1],
+                [1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ]
+        )
         self.spec = DummySpec(
             id="WolvesAndBushes-v0",
             max_episode_steps=game_options["max_turns"],
@@ -320,15 +328,20 @@ class WolvesAndBushesEnv(gym.Env):
 
         return self._get_obs(), reward, done, {}
 
+    def mask_grid(self, grid, role):
+        if role == 1:
+            # gatherer
+            view_mask = self.gatherer_tile_mask
+        else:
+            view_mask = self.lookout_tile_mask
+        blindspots = np.where(view_mask == 1)
+        grid[blindspots] = 0
+        return grid
+
     def _get_obs(self):
-
-        #change this to apply view_masks to the wolves and bushes
-        #   visible to the agent.
-        blinding_here = True
-
         role = self._get_role_obs()
         if role == 1:
-            #gatherer
+            # gatherer
             view_mask = self.gatherer_tile_mask
         else:
             view_mask = self.lookout_tile_mask
@@ -336,13 +349,8 @@ class WolvesAndBushesEnv(gym.Env):
         wolves = self._get_wolf_grid()
         bushes = self._get_bush_grid()
         ostriches = self._get_ostrich_grid()
-        if blinding_here:
-            blindspots = np.where(view_mask == 1)
-            wolves[blindspots] = 0
-            bushes[blindspots] = 0
-            ostriches[blindspots] = 0
 
-        return(
+        return (
             wolves,
             bushes,
             ostriches,
@@ -355,7 +363,6 @@ class WolvesAndBushesEnv(gym.Env):
             view_mask,
         )
 
-
     def _get_alive_starved_killed_obs(self):
         return self.ostriches.iloc[0].alive_starved_killed
 
@@ -364,6 +371,7 @@ class WolvesAndBushesEnv(gym.Env):
 
     def _get_ostrich_grid(self):
         ostrich_grid = np.zeros((self.game_options["width"], self.game_options["height"]))
+        # vision_distance = self.game_options["vision_distance"]
         # TODO combine these next two lines
         visible_objects = self.distances[
             (self.distances.ostrich_id == 0)
@@ -378,9 +386,10 @@ class WolvesAndBushesEnv(gym.Env):
                 int,
             ),
         ] = 1
-        return ostrich_grid
+        return self.mask_grid(ostrich_grid, self._get_role_obs())
 
     def _get_wolf_grid(self):
+        # TODO instead of masking, filter visible objects down to those within vision distance
         wolf_grid = np.zeros((self.game_options["width"], self.game_options["height"]))
         # TODO combine these next two lines
         visible_objects = self.distances[
@@ -389,15 +398,13 @@ class WolvesAndBushesEnv(gym.Env):
             & (abs(self.distances.delta_y) < self.game_options["height"] / 2)
         ]
 
-        visible_wolves = visible_objects[
-            visible_objects.object_type == "wolf"
-        ]  # lookout
+        visible_wolves = visible_objects[visible_objects.object_type == "wolf"]
 
         wolf_grid[
             np.array(visible_wolves.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_wolves.delta_y + self.game_options["height"] // 2, int),
         ] = 1
-        return wolf_grid
+        return self.mask_grid(wolf_grid, self._get_role_obs())
 
     def _get_bush_grid(self):
         bush_grid = np.zeros((self.game_options["width"], self.game_options["height"]))
@@ -412,7 +419,8 @@ class WolvesAndBushesEnv(gym.Env):
             np.array(visible_bushes.delta_x + self.game_options["width"] // 2, int),
             np.array(visible_bushes.delta_y + self.game_options["height"] // 2, int),
         ] = 1
-        return bush_grid
+
+        return self.mask_grid(bush_grid, self._get_role_obs())
 
     def _get_food_quantity(self) -> float:
         # Returns food value as a float between 0 and 1
@@ -457,9 +465,12 @@ class WolvesAndBushesEnv(gym.Env):
         if alive_starved_killed == 2:
             empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
             image[empty] = 127
-        if role == 0:
+        else:
             empty = (image[:, :, 0] == 0) * (image[:, :, 1] == 0) * (image[:, :, 2] == 0)
             image[empty] = 255
+            image[:, :, 0] = self.mask_grid(image[:, :, 0], role)
+            image[:, :, 1] = self.mask_grid(image[:, :, 1], role)
+            image[:, :, 2] = self.mask_grid(image[:, :, 2], role)
         image = image.repeat(scale, axis=0).repeat(scale, axis=1)
         if draw_health:
             image_from_array = Image.fromarray(image)
@@ -687,7 +698,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
                 self.env.observation_space[3],  # food
                 self.env.observation_space[4],  # role
                 self.env.observation_space[5],  # alive_killed_starved
-                spaces.Box(0, 1, shape=(121,), dtype=int) # view mask
+                spaces.Box(0, 1, shape=(121,), dtype=int),  # view mask
             )
         )
 
@@ -696,8 +707,6 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
 
         wolves = obs[0]
         bushes = obs[1]
-
-
 
         nearest_wolf, second_nearest_wolf = self._get_nearest_things(wolves)
         wolves_in_each_direction = np.minimum(self._get_num_things_each_direction(wolves), 10)
@@ -779,7 +788,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         half_row_index = self.game_options["height"] // 2
         half_column_index = self.game_options["width"] // 2
 
-        #asserting that these values are 0 on the view_mask as well in order
+        # asserting that these values are 0 on the view_mask as well in order
         #   to include them.
         up = np.count_nonzero(binary_map[0:half_row_index, :] == 1)
         right = np.count_nonzero(binary_map[:, half_column_index + 1 :] == 1)
@@ -965,8 +974,8 @@ if __name__ == "__main__":
     # You can set the level to logger.DEBUG or logger.WARN if you
     # want to change the amount of output.
     logger.set_level(logger.INFO)
-
-    env = PragmaticObsWrapper(WolvesAndBushesEnv())
+    env = WolvesAndBushesEnv()
+    # env = PragmaticObsWrapper(WolvesAndBushesEnv())
     # env = WolvesAndBushesEnvEgocentricJustBushes()
     # env = NNFriendlyObsWrapper(WolvesAndBushesEnvEgocentric())
 
@@ -975,7 +984,7 @@ if __name__ == "__main__":
     # will be namespaced). You can also dump to a tempdir if you'd
     # like: tempfile.mkdtemp().
     outdir = "/tmp/random-agent-results"
-    #env = wrappers.Monitor(env, directory=outdir, force=True)
+    env = wrappers.Monitor(env, directory=outdir, force=True)
     env.seed(0)
     agent = RandomAgent(env.action_space)
 
