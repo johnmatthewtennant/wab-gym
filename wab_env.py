@@ -703,6 +703,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         )
 
     def observation(self, obs):
+
         view_mask = obs[6]
 
         wolves = obs[0]
@@ -739,6 +740,7 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
         )
 
     def _get_nearest_things(self, binary_map: np.ndarray):
+
         # abstracted so this method can be used with wolf maps, bush maps,
         #   and possibly ostrich maps in the future
 
@@ -756,27 +758,30 @@ class PragmaticObsWrapper(gym.ObservationWrapper):
             relative_row = indexes[0][j] - self.game_options["height"] // 2
             relative_column = indexes[1][j] - self.game_options["width"] // 2
             taxicab = abs(relative_row) + abs(relative_column)
-            if taxicab < shortest_taxicab:
+            if taxicab <= shortest_taxicab:
                 second_shortest_taxicab = shortest_taxicab
                 second_shortest_taxicab_indexes = shortest_taxicab_indexes[:]
                 shortest_taxicab = taxicab
                 shortest_taxicab_indexes[0] = relative_row
                 shortest_taxicab_indexes[1] = relative_column
-
-        up = max(shortest_taxicab_indexes[0], 0)
+            elif (taxicab <= second_shortest_taxicab):
+                second_shortest_taxicab = taxicab
+                second_shortest_taxicab_indexes[0] = relative_row
+                second_shortest_taxicab_indexes[1] = relative_column
+        up = abs(min(shortest_taxicab_indexes[0], 0))
         up = bool(up) * (self.max_distance - up)
         right = max(shortest_taxicab_indexes[1], 0)
         right = bool(right) * (self.max_distance - right)
-        down = abs(min(shortest_taxicab_indexes[0], 0))
+        down = max(shortest_taxicab_indexes[0], 0) # negative indexes mean up
         down = bool(down) * (self.max_distance - down)
         left = abs(min(shortest_taxicab_indexes[1], 0))
         left = bool(left) * (self.max_distance - left)
 
-        up2 = max(second_shortest_taxicab_indexes[0], 0)
+        up2 = abs(min(second_shortest_taxicab_indexes[0], 0))
         up2 = bool(up2) * (self.max_distance - up2)
         right2 = max(second_shortest_taxicab_indexes[1], 0)
         right2 = bool(right2) * (self.max_distance - right2)
-        down2 = abs(min(second_shortest_taxicab_indexes[0], 0))
+        down2 = max(second_shortest_taxicab_indexes[0], 0)
         down2 = bool(down2) * (self.max_distance - down2)
         left2 = abs(min(second_shortest_taxicab_indexes[1], 0))
         left2 = bool(left2) * (self.max_distance - left2)
@@ -963,8 +968,8 @@ class RandomAgent(object):
         return self.action_space.sample()
 
 
-if __name__ == "__main__":
 
+if __name__ == "__main__":
     # NOTE FROM JOHN: This code is just for testing the env with a random agent.
     # To use the env, just import it from wab-env import WolvesAndBushesEnv
     # then env = WolvesAndBushesEnv() or env = WolvesAndBushesEnv(game_options)
@@ -1006,3 +1011,4 @@ if __name__ == "__main__":
 
     # Close the env and write monitor result info to disk
     env.close()
+
