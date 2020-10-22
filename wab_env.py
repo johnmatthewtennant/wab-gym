@@ -11,11 +11,13 @@ from PIL import Image, ImageDraw
 default_game_options = {
     # GYM OPTIONS
     "reward_per_turn": 0,
-    "reward_for_being_killed": 0,
-    "reward_for_starving": 0,
-    "reward_for_finishing": 0,
-    "reward_for_eating": 1,
+    "reward_for_being_killed": -1,
+    "reward_for_starving": -1,
+    "reward_for_finishing": 1,
+    "reward_for_eating": 0.1,
     "gatherer_only": False,  # Allows gatherers to see wolves. Disables lookout mode
+    "lookout_only": True,
+    "restrict_view": False, # True means apply the view mask, false means don't
     "starting_role": 1,  # None values will be assigned randomly
     # GAME
     "max_turns": 80,
@@ -155,6 +157,17 @@ class WolvesAndBushesEnv(gym.Env):
                 ],
                 dtype=int,
             )
+        elif self.game_options["lookout_only"]:
+            self.action_definitions = pd.DataFrame(
+                [
+                    {"x": 0, "y": 1, "role": None},  # up
+                    {"x": 1, "y": 0, "role": None},  # right
+                    {"x": 0, "y": -1, "role": None},  # down
+                    {"x": -1, "y": 0, "role": None},  # left
+                    {"x": 0, "y": 0, "role": 0},  # don't move. Be lookout
+                ],
+                dtype=int,
+            )
         else:
             self.action_definitions = pd.DataFrame(
                 [
@@ -286,7 +299,7 @@ class WolvesAndBushesEnv(gym.Env):
         # ostrich eat
         ostrich_bush_pairs = self.distances[
             (self.distances.taxicab_distance == 0)
-            & (self.distances.ostrich_role == 1)  # gatherer
+            & ((self.distances.ostrich_role == 1) | self.game_options["lookout_only"])  # gatherer
             & (self.distances.object_type == "bush")
             & (self.distances.ostrich_alive_starved_killed == 0)
         ]
@@ -334,8 +347,13 @@ class WolvesAndBushesEnv(gym.Env):
             view_mask = self.gatherer_tile_mask
         else:
             view_mask = self.lookout_tile_mask
+        #added this to test lookout only
+        if not self.game_options["restrict_view"]:
+            view_mask = np.zeros((11,11))
+
         blindspots = np.where(view_mask == 1)
         grid[blindspots] = 0
+
         return grid
 
     def _get_obs(self):
@@ -345,6 +363,9 @@ class WolvesAndBushesEnv(gym.Env):
             view_mask = self.gatherer_tile_mask
         else:
             view_mask = self.lookout_tile_mask
+
+        if not self.game_options["restrict_view"]:
+            view_mask = np.zeros((11,11))
 
         wolves = self._get_wolf_grid()
         bushes = self._get_bush_grid()
