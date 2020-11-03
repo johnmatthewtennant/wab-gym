@@ -4,6 +4,7 @@ import pandas as pd
 
 default_game_options = {
     # GYM OPTIONS
+    "ostrich_mode_or_wolf_mode": 0, #ostrich mode is 0, wolf mode is 1
     "reward_per_turn": 0,
     "reward_for_being_killed": -1,
     "reward_for_starving": -1,
@@ -48,15 +49,17 @@ class GlobeWorld:
     CLARIFICATION: THIS CLASS PROVIDES THE INTERFACE OF A GRID, BUT ACTUALLY
     STORES THE FLOATING-POINT LOCATION OF EACH ITEM IN THE WORLD. WE SHOULD
     DISCUSS HOW WE WANT TO IMPLEMENT THIS.
+
+    This class should store all entities in the world space and each entity
+    should have a unique ID associated with it.
     """
 
     def __init__(self):
         """Initialize the object"""
 
-    def __getitem__(self, index):
-        """This method overrides how items are indexed.
-        """
-        return self._world[index % len(self)]
+    def get_visible_objects(self, entity_id: int, viewradius: float):
+        """Return all objects visible to the entity with specified id and vision
+        cone specified by viewradius."""
 
     def populate_world(self, wolves, bushes, ostriches):
         """Adds the specified wolves, bushes, and ostriches based on the
@@ -89,7 +92,7 @@ class WolvesAndBushesEnvV2(gym.env):
     observations.
     """
 
-    def __init__(self, game_options = default_game_options):
+    def __init__(self, policy_function, game_options = default_game_options,):
         """Initialize an environment with the specified options.
         This method needs to:
         1. Initialize action and observation spaces
@@ -100,6 +103,11 @@ class WolvesAndBushesEnvV2(gym.env):
                 class should be used for this which overrides the indexing
                 method to work on a modulo-adjusted basis.
         2. Call reset()
+
+        Note that policy_function is the function determining actions of wolves
+        or bushes, depending on whether we're in wolf mode or ostrich mode.
+        i.e. in wolf mode, policy function determines the actions of ostriches
+        and vice versa.
         """
 
     def _update_world(self):
@@ -122,15 +130,15 @@ class WolvesAndBushesEnvV2(gym.env):
         """
 
     def _get_wolf_spawn_indices(self):
-        """Returns the indexes of all spawn locations of the wolves.
+        """Returns the positions of all spawn locations of the wolves.
         """
 
     def _get_ostrich_spawn_indices(self):
-        """Returns the indexes of all spawn locations of the wolves.
+        """Returns the positions of all spawn locations of the wolves.
         """
 
     def _get_bush_spawn_indices(self):
-        """Returns the indexes of all spawn locations of the wolves.
+        """Returns the positions of all spawn locations of the wolves.
         """
 
     def step(self, actions):
@@ -194,7 +202,8 @@ class WolvesAndBushesEnvV2(gym.env):
     def _generate_grids(self, ostrich_index):
         """Return grids showing the positions of nearby wolves, ostriches, and
         bushes. Apply their view masks based on the role by calling
-        _apply_view_mask.
+        _apply_view_mask. Obtain these by calling get_visible_objects in
+        GlobeWorld.
         """
 
     def _apply_view_mask(self, grid, grid_width, grid_height, ostrich_role):
