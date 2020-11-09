@@ -63,49 +63,48 @@ class GlobeWorld:
         """Initialize the object"""
         self._id_generator = -1
         # currently this is the setup for storing entities.
-        self._entities = pd.DataFrame(columns=["Id", "Type", "Entity Object"])
+        self._entities = pd.DataFrame(columns=["Id", "Type", "Entity Object",
+                                               "X", "Y"])
 
     def create_wolf(self, starting_position_x, starting_position_y, action_function = None, ):
         """Create a new wolf and add it to the world."""
         self._id_generator += 1
         self._entities = self._entities.append({"Id": self._id_generator,
                                                 "Type": "Wolf",
-            "Entity Object": Wolf(self._id_generator, starting_position_x,
-                                  starting_position_y, action_function,
+            "Entity Object": Wolf(self._id_generator, action_function,
                                   default_game_options["wolf_starting_food"],
                                   default_game_options["wolf_walk_cost"],
                                   default_game_options["wolf_run_cost"],
                                   default_game_options["wolf_walk_speed"],
-                                  default_game_options["wolf_run_speed"])})
+                                  default_game_options["wolf_run_speed"]),
+            "X": starting_position_x, "Y": starting_position_y})
 
         return self._id_generator
 
-    def create_bush(self, starting_position_x, starting_position_y,
-                     action_function = None):
+    def create_bush(self, action_function = None):
         """Create a new bush and add it to the world."""
         self._id_generator += 1
 
         self._entities = self._entities.append({"Id": self._id_generator,
                                                 "Type": "Bush",
-            "Entity Object": Bush(self._id_generator, starting_position_x,
-                                  starting_position_y, action_function,
+            "Entity Object": Bush(self._id_generator, action_function,
                                   default_game_options["food_per_bush"],
-                                  default_game_options["food_given_per_turn"])})
+                                  default_game_options["food_given_per_turn"]),
+            "X": starting_position_x, "Y": starting_position_y})
 
         return self._id_generator
 
-    def create_ostrich(self, starting_position_x, starting_position_y,
-                        action_function = None):
+    def create_ostrich(self, action_function = None):
         """Create a new ostrich and add it to the world."""
         self._id_generator += 1
         self._entities = self._entities.append({"Id": self._id_generator,
                                                 "Type": "Ostrich",
-            "Entity Object": Ostrich(self._id_generator, starting_position_x,
-                                     starting_position_y, action_function,
+            "Entity Object": Ostrich(self._id_generator, action_function,
                                      default_game_options["ostrich_starting_food"],
                                      default_game_options["ostrich_food_eaten_per_turn"],
                                      default_game_options["ostrich_move_speed"],
-                                     default_game_options["starting_role"])})
+                                     default_game_options["starting_role"]),
+            "X": starting_position_x, "Y": starting_position_y})
 
         return self._id_generator
 

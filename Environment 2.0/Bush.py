@@ -7,12 +7,12 @@ class Bush(Entity):
     they are eaten from, and a status (has food, doesn't have food)
     """
 
-    def __init__(self, id: int, starting_x, starting_y, action_function = None,
+    def __init__(self, id: int, action_function = None,
                  initial_food=10, food_given_when_eaten=3):
         if action_function is None:
-            super.__init__(id, starting_x, starting_y)
+            super.__init__(id)
         else:
-            super.__init__(id, starting_x, starting_y, action_function)
+            super.__init__(id, action_function)
 
         self.food = initial_food
         self.food_given_when_eaten = food_given_when_eaten

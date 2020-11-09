@@ -13,14 +13,14 @@ class Wolf(Entity):
     7. a status (alive/starved)
     """
 
-    def __init__(self, id: int, starting_x, starting_y,
+    def __init__(self, id: int,
                  action_function = None, starting_food=20.,
                walking_food_cost=1., running_food_cost=2., walking_speed=1.,
                 running_speed=1.5):
         if action_function is None:
-            super.__init__(id, starting_x, starting_y)
+            super.__init__(id)
         else:
-            super.__init__(id, starting_x, starting_y, action_function)
+            super.__init__(id, action_function)
 
         self.food = starting_food
         self.walking_food_cost = walking_food_cost

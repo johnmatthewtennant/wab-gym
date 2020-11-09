@@ -8,13 +8,13 @@ class Ostrich(Entity):
     level, a food cost per turn, a current speed, a role, and a status
     (alive/starved/killed)"""
 
-    def __init__(self, id: int, starting_x, starting_y,action_function=None,
+    def __init__(self, id: int, action_function=None,
                  starting_food=1, food_cost_per_turn=0.01, speed=1.,
                  starting_role=0, alive_starved_killed=0):
         if action_function is None:
-            super.__init__(id, starting_x, starting_y)
+            super.__init__(id)
         else:
-            super.__init__(id, starting_x, starting_y, action_function)
+            super.__init__(id, action_function)
 
         self.food = starting_food
         self.food_cost = food_cost_per_turn
