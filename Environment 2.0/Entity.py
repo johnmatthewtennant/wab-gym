@@ -1,10 +1,20 @@
 
-def default_action(*args):
+def default_act(self, action):
     """This is the default action function. Entities that don't act (such as
     bushes) should use this by not passing in a function for action_function in
     the Entity constructor.
     """
-    return None
+    return
+
+
+def default_visible_data(self):
+    return
+
+
+def default_obs(self):
+    """Default function for formatting and returning observations"""
+    # this may not work. Might need to put this in the function.
+    return [self.x, self.y]
 
 
 class Entity:
@@ -23,11 +33,23 @@ class Entity:
     above.
     """
 
-    def __init__(self, id: int, action_function=default_action):
+    def __init__(self, id: int, _x, _y, act_function=default_action,
+                 obs_function=default_obs,
+                 visible_data_function=default_visible_data):
         """Initialize a new Entity with a starting position and id.
         """
         self._id = id
-        self.act = action_function
+        self.act = act_function
+        self.obs = obs_function
+        self.visible_data = visible_data_function
+        self.x = _x
+        self.y = _y
 
     def get_id(self):
-        return this._id
+        return self._id
+
+    def getX(self):
+        return self.x
+
+    def getY(self):
+        return self.y

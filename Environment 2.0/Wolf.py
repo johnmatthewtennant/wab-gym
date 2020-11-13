@@ -1,5 +1,11 @@
 import Entity
 
+def default_wolf_visible_data(self):
+    return
+
+def default_wolf_obs(self):
+    return [self.x, self.y, self.food, self.is_running, self.status]
+
 
 class Wolf(Entity):
     """An entity class describing a wolf. On top of the existing Entity members,
@@ -13,14 +19,17 @@ class Wolf(Entity):
     7. a status (alive/starved)
     """
 
-    def __init__(self, id: int,
-                 action_function = None, starting_food=20.,
-               walking_food_cost=1., running_food_cost=2., walking_speed=1.,
-                running_speed=1.5):
+    def __init__(self, id: int, _x, _y,
+                 action_function = None, obs_function=default_wolf_obs,
+                 visible_data_function=default_wolf_visible_data,
+                 starting_food=20., walking_food_cost=1., running_food_cost=2.,
+                 walking_speed=1., running_speed=1.5):
         if action_function is None:
-            super.__init__(id)
+            super.__init__(id, _x, _y, obs_function=obs_function,
+                           visible_data_function=visible_data_function)
         else:
-            super.__init__(id, action_function)
+            super.__init__(id, _x, _y, action_function, obs_function,
+                           visible_data_function)
 
         self.food = starting_food
         self.walking_food_cost = walking_food_cost
