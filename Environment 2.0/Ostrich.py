@@ -1,28 +1,23 @@
 import Entity
 
-def default_ostrich_visible_data(self):
-    return
 
-def default_ostrich_obs(self):
-    return [self.x, self.y, self.food, self.role, self.status]
-
-class Ostrich(Entity):
+class Ostrich(Entity.Entity):
     """A class representing an ostrich in the environment.
 
     Ostriches, along with the other things entities store, have a current food
     level, a food cost per turn, a current speed, a role, and a status
     (alive/starved/killed)"""
 
-    def __init__(self, id: int, _x, _y, action_function=None,
-                 obs_function=default_ostrich_obs,
-                 visible_data_function=default_ostrich_visible_data,
+    def __init__(self, id: int, _x, _y, action_function,
+                 obs_function,
+                 visible_data_function,
                  starting_food=1, food_cost_per_turn=0.01, speed=1.,
                  starting_role=0, alive_starved_killed=0):
         if action_function is None:
-            super.__init__(id, _x, _y, obs_function=obs_function,
+            super().__init__(self, id, _x, _y, obs_function=obs_function,
                            visible_data_function=visible_data_function)
         else:
-            super.__init__(id, _x, _y, action_function, obs_function,
+            super().__init__(self, id, _x, _y, action_function, obs_function,
                            visible_data_function)
 
         self.food = starting_food

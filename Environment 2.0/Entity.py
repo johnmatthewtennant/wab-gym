@@ -6,10 +6,8 @@ def default_act(self, action):
     """
     return
 
-
 def default_visible_data(self):
     return
-
 
 def default_obs(self):
     """Default function for formatting and returning observations"""
@@ -33,7 +31,7 @@ class Entity:
     above.
     """
 
-    def __init__(self, id: int, _x, _y, act_function=default_action,
+    def __init__(self, id: int, _x, _y, act_function=default_act,
                  obs_function=default_obs,
                  visible_data_function=default_visible_data):
         """Initialize a new Entity with a starting position and id.
