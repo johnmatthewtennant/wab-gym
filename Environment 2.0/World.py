@@ -53,13 +53,13 @@ def default_bush_visible_data(self):
     return [self.food]
 
 def default_ostrich_visible_data(self):
-    return
+    return []
 
 def default_ostrich_obs(self):
     return [self.x, self.y, self.food, self.role, self.status]
 
 def default_wolf_visible_data(self):
-    return
+    return []
 
 def default_wolf_obs(self):
     return [self.x, self.y, self.food, self.is_running, self.status]
@@ -155,7 +155,7 @@ class World:
         entity_y = self._entities.loc[self._entities['Id'] == entity_id]['Y'].iloc[0]
 
         # this collects all objects that should be on the grid.
-        nearby_objects_df = self._entities.copy(deep=False)
+        nearby_objects_df = self._entities.copy(deep=True)
 
         nearby_objects_df["Delta_X"] = nearby_objects_df["X"] - entity_x
         nearby_objects_df["Delta_Y"] = nearby_objects_df["Y"] - entity_y
@@ -172,7 +172,7 @@ class World:
         elif self._world_width < entity_x + viewradius:
             # this long-winded line is essentially assigning the minimum Delta_X
             #   to be a wrap-around if appropriate
-            nearby_objects_df.loc[nearby_objects_df["X"] <= viewradius - self._world_width -
+            nearby_objects_df.loc[nearby_objects_df["X"] <= viewradius - self._world_width +
                               entity_x, "Wrap_around_X"] = \
                 nearby_objects_df["X"] + self._world_width - entity_x
 
@@ -189,10 +189,10 @@ class World:
                 nearby_objects_df.loc[i, "Delta_Y"] = min(nearby_objects_df.loc[i, "Delta_Y"],
                                                           nearby_objects_df.loc[i, "Wrap_around_Y"], key=abs)
 
-        elif self._world_width < entity_y + viewradius:
-            nearby_objects_df.loc[nearby_objects_df["Y"] <= viewradius - self._world_width -
-                              entity_y, "Delta_Y"] = \
-                nearby_objects_df["Y"] + self._world_width - entity_y
+        elif self._world_height < entity_y + viewradius:
+            nearby_objects_df.loc[nearby_objects_df["Y"] <= viewradius - self._world_height +
+                              entity_y, "Wrap_around_Y"] = \
+                nearby_objects_df["Y"] + self._world_height - entity_y
 
             for i in range(len(nearby_objects_df)):
                 nearby_objects_df.loc[i, "Delta_Y"] = min(nearby_objects_df.loc[i, "Delta_Y"],
@@ -213,7 +213,9 @@ class World:
                   "Delta_Y": nearby_objects_df["Delta_Y"],
                   "Type": nearby_objects_df["Type"],
                   "Additional_Data": visible_data}
-        )
+        ).reset_index()
+        # above we reset the index to handle values that were removed from the
+        #   dataframe.
 
         return nearby_objects_df
 
@@ -236,4 +238,4 @@ class World:
         """Return all raw observations for the entity specified."""
         assert self._current_turn == current_turn
         return [self._get_visible_objects(entity_id, viewradius)] + \
-               self._get_additional_obs(entity_id)
+                self._get_additional_obs(entity_id)
