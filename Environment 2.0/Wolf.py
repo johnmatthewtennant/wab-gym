@@ -14,16 +14,16 @@ class Wolf(Entity.Entity):
     """
 
     def __init__(self, id: int, _x, _y,
-                 action_function = None, obs_function = None,
-                 visible_data_function = None,
+                 action_function=None, obs_function=None,
+                 visible_data_function=None,
                  starting_food=20., walking_food_cost=1., running_food_cost=2.,
                  walking_speed=1., running_speed=1.5):
         if action_function is None:
-            super().__init__(self, id, _x, _y, obs_function=obs_function,
-                           visible_data_function=visible_data_function)
+            Entity.Entity.__init__(self, id, _x, _y, obs_function=obs_function,
+                                   visible_data_function=visible_data_function)
         else:
-            super().__init__(self, id, _x, _y, action_function, obs_function,
-                           visible_data_function)
+            Entity.Entity.__init__(self, id, _x, _y, action_function,
+                                   obs_function, visible_data_function)
 
         self.food = starting_food
         self.walking_food_cost = walking_food_cost

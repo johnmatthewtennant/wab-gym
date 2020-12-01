@@ -14,10 +14,10 @@ class Ostrich(Entity.Entity):
                  starting_food=1, food_cost_per_turn=0.01, speed=1.,
                  starting_role=0, alive_starved_killed=0):
         if action_function is None:
-            super().__init__(self, id, _x, _y, obs_function=obs_function,
+            Entity.Entity.__init__(self, id, _x, _y, obs_function=obs_function,
                            visible_data_function=visible_data_function)
         else:
-            super().__init__(self, id, _x, _y, action_function, obs_function,
+            Entity.Entity.__init__(self, id, _x, _y, action_function, obs_function,
                            visible_data_function)
 
         self.food = starting_food

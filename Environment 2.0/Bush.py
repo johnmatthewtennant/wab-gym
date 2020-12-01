@@ -12,10 +12,10 @@ class Bush(Entity.Entity):
                  visible_data_function=None,
                  initial_food=10, food_given_when_eaten=3):
         if action_function is None:
-            super().__init__(self, id, _x, _y, obs_function=obs_function,
+            Entity.Entity.__init__(self, id, _x, _y, obs_function=obs_function,
                            visible_data_function=visible_data_function)
         else:
-            super().__init__(self, id, _x, _y, action_function,
+            Entity.Entity.__init__(self, id, _x, _y, action_function,
                            obs_function=obs_function,
                            visible_data_function=visible_data_function)
 
