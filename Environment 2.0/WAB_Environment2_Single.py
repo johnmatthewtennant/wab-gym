@@ -5,7 +5,7 @@ from World import World
 import random
 
 
-class WAB_Environment2_Single(gym.env):
+class WAB_Environment2_Single(gym.Env):
     """This is our second environment. The main extensions this environment
     provides are the dynamic wolves, the globe-like and extant world, and
     the ability to simulate multiple agents at once.
@@ -26,30 +26,18 @@ class WAB_Environment2_Single(gym.env):
 
     def __init__(self, world, type, starting_position_x, starting_position_y):
         """Initialize an environment with the specified width, height, and
-        game_options. Calls reset on this agent, which spawns it at a random
-        place in the world.
+        game_options.
         """
         self.world = world
         self.id = self.world.create_entity(type, starting_position_x,
                                            starting_position_y)
         self.current_turn = 0
 
-    def reset(self):
-        """Resets the environment to a starting state. This involves:
-        1. Creating a new world
-            a. Spawning wolves
-            b. Spawning bushes
-            c. Spawning ostriches
-            (note, the above should be done by calling individual methods which
-            we can change later without affecting this method.)
-            d. Calling GlobeWorld.populate_world
-        2. setting current_turn to 0
-        3. Returning the observations of the starting state. Described in more
-            detail in _get_obs()
-        """
+    def reset(self, new_x=-1, new_y=-1):
         self.current_turn = 0
         # when we reset the entity, we randomize its position
-        new_x, new_y = self._get_random_spawn_indices()
+        if new_x < 0 or new_y < 0:
+            new_x, new_y = self._get_random_spawn_indices()
         self.world.reset_entity(self.id, new_x, new_y)
 
     def _get_random_spawn_indices(self):
@@ -72,25 +60,15 @@ class WAB_Environment2_Single(gym.env):
         7. determining whether all the ostriches are dead, if so done=True.
         8. Return all these values.
         """
-        self.world.perform_entity_action(self.id, action, self.current_turn)
+        reward = self.world.perform_entity_action(self.id, action, self.current_turn)
 
         self.current_turn += 1
 
-        obs = self._get_obs()
-
         done = self.world.is_entity_done(self.id)
 
-        reward = self._compute_reward() #TODO: figure out how to compute the reward
+        return reward, done
 
-        return obs, reward, done, {}
-
-    def _compute_reward(self):
-        """Computes and returns the rewards for each ostrich given the current
-        world state.
-        """
-        #TODO: implement this method
-
-    def _get_obs(self):
+    def get_obs(self):
         """Return RAW observations. This means we're going to have a massive
         list of raw observations for each ostrich. Each ostrich should have:
         1. A grid showing the nearby ostriches
@@ -110,7 +88,4 @@ class WAB_Environment2_Single(gym.env):
         """
         return self.world.get_observations(self.id, self.current_turn)
 
-    #   BELOW ARE FUNCTIONS THAT MODIFY THE DEFAULT BEHAVIOUR OF THE WORLD. ONLY
-    #   USE THESE WHEN YOU NEED TO CHANGE HOW THE OBSERVATIONS ARE COLLECTED
-    #   OR HOW THE ACTIONS ARE PROCESSED.
 

@@ -58,7 +58,6 @@ def test_get_visible_objects_wrap_horizontal():
     other_ostrich_id = world.create_ostrich(15, 15)
 
     world.perform_entity_action(other_ostrich_id, 0, 0)
-    world.update_game_state()
 
     nearby_objects_df = world._get_visible_objects(ostrich_id, 10)
 
